@@ -1,8 +1,14 @@
-# Internal Cached Version - URL Shortener
+# External Cached Version - URL Shortener
 
-This version adds an **internal (in-memory) cache** using Spring Cache + Caffeine to improve read performance.
+This version uses an **External (Redis) Cache** to ensure consistency across multiple application instances.
 
 ## Running Multiple Instances for Testing
+
+### Prerequisites
+- **Redis**: You must have Redis running locally on port 6379 (or configure `application.properties`).
+  ```bash
+  docker run -p 6379:6379 -d redis:alpine
+  ```
 
 ### Option 1: Via IDE Run Configurations
 
@@ -11,26 +17,21 @@ Create two separate run configurations in your IDE:
 **Server A:**
 - Main class: `com.example.shorturl.ShortUrlApplication`
 - VM options: `-Dserver.port=8081`
-- Program arguments: (none)
 
 **Server B:**
 - Main class: `com.example.shorturl.ShortUrlApplication`
 - VM options: `-Dserver.port=8082`
-- Program arguments: (none)
 
-Both will share the same H2 database file (`${java.io.tmpdir}/shortUrldb`) but have separate caches.
+Both will share the same H2 database file **AND** the same Redis instance.
 
 ### Option 2: Via Command Line
 
 ```bash
-# Terminal 1 - Server A
 mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=8081
-
-# Terminal 2 - Server B
 mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=8082
 ```
 
-### Testing the Stale Cache Problem
+### Verifying Consistency
 
 1. **Create a short URL on Server A:**
    ```bash
@@ -38,57 +39,33 @@ mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=8082
    # Returns: {"shortUrl":"abc123xyz"}
    ```
 
-2. **Read from Server A (populates Cache A):**
+2. **Read from Server A (populates Redis):**
    ```bash
    curl -I http://localhost:8081/shorturl/abc123xyz
    # Returns: 302 Found
    ```
 
-3. **Read from Server B (populates Cache B):**
+3. **Read from Server B (hits Redis):**
    ```bash
    curl -I http://localhost:8082/shorturl/abc123xyz
-   # Returns: 302 Found
+   # Returns: 302 Found (Cache Hit)
    ```
 
-4. **Delete from Server A (evicts Cache A, updates DB):**
+4. **Delete from Server A (evicts from Redis):**
    ```bash
    curl -X DELETE http://localhost:8081/shorturl/abc123xyz
    # Returns: 204 No Content
    ```
 
-5. **Read from Server A (cache evicted, checks DB):**
-   ```bash
-   curl -I http://localhost:8081/shorturl/abc123xyz
-   # Returns: 404 Not Found ✓
-   ```
-
-6. **Read from Server B (STALE CACHE!):**
+5. **Read from Server B (CONSISTENT!):**
    ```bash
    curl -I http://localhost:8082/shorturl/abc123xyz
-   # Returns: 302 Found ✗ (Should be 404, but cache is stale!)
+   # Returns: 404 Not Found ✓ (Immediately consistent!)
    ```
-
-7. **Wait 2+ seconds for TTL to expire, then read from Server B again:**
-   ```bash
-   sleep 3
-   curl -I http://localhost:8082/shorturl/abc123xyz
-   # Returns: 404 Not Found ✓ (Cache expired, DB checked)
-   ```
-
-## Debugging the Test
-
-To debug `MultiServerInconsistencyTest`:
-
-1. Set breakpoints in the test method at key HTTP calls
-2. Run the test in debug mode (right-click → Debug Test)
-3. The two Spring contexts will start in the same JVM, so you can step through and inspect variables
-4. Watch the console for "Creating URL on Server A..." messages to track progress
 
 ## Cache Configuration
 
-- **Type:** Caffeine (in-memory)
-- **TTL:** 2 seconds (`expireAfterWrite=2s`)
-- **Cache name:** `urls`
-- **Key:** Short URL ID
+- **Type:** Redis
+- **TTL:** 1 minute (configurable)
+- **Host/Port:** localhost:6379
 
-See `application.properties` for configuration details.
