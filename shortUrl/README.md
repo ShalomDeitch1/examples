@@ -59,7 +59,7 @@ To mitigate the latency introduced by the database, we add an **Internal (In-Mem
 ```mermaid
 graph LR
     User -- Request Short URL --> App[Application]
-    App -- Check Cache --> Cache{(Internal Cache)}
+    App -- Check Cache --> Cache{Internal Cache}
     Cache -- Hit --> App
     Cache -- Miss --> DB[(Relational Database)]
     DB -- Data --> Cache
@@ -73,5 +73,33 @@ graph LR
 **Remaining Issues:**
 * **Consistency:** If multiple application instances are running, one might update/delete a record (clearing its own cache), but other instances will still hold the **stale** data in their caches until the TTL expires.
 * **Memory Limit:** Cache size is limited by the application's heap.
+
+---
+
+## 4. External Cached Version (Redis)
+
+To solve the consistency issue in a multi-server environment, we replace the internal cache with an **External Shared Cache** (Redis). All application instances connect to the same Redis instance.
+
+[Link to Project](./externalCachedVersion)
+
+```mermaid
+graph LR
+    User -- Request --> App1[App Instance 1]
+    User -- Request --> App2[App Instance 2]
+    
+    App1 -- Check/Evict --> Redis[(Shared Redis Cache)]
+    App2 -- Check/Evict --> Redis
+    
+    Redis -- Miss --> DB[(Relational Database)]
+    DB -- Data --> Redis
+```
+
+**Improvements:**
+* **Consistency:** When one instance updates/deletes data, it invalidates the cache in Redis, so all other instances immediately see the change (or get a cache miss and fetch from DB).
+* **Scalability:** Cache size is independent of application heap.
+
+**Remaining Issues:**
+* **Availability:** Redis becomes another critical component. If Redis goes down, load spikes on the DB.
+* **Network Latency:** Accessing Redis is slower than internal memory (but much faster than DB).
 
 
