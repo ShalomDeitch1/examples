@@ -22,7 +22,7 @@ Create a new project `databaseVersion` based on `simplestVersion` that uses a pe
 ### Persistence
 #### [NEW] [ShortUrl.java](file:///c:/projects/learn/examples/shortUrl/databaseVersion/src/main/java/com/example/shorturl/model/ShortUrl.java)
 - JPA Entity `ShortUrl`
-- Fields: `shortUrl` (String, PK) - *Renamed from 'id' per feedback*, `originalUrl` (String)
+- Fields: `shortUrl` (String, PK), `originalUrl` (String)
 
 #### [NEW] [ShortUrlRepository.java](file:///c:/projects/learn/examples/shortUrl/databaseVersion/src/main/java/com/example/shorturl/repository/ShortUrlRepository.java)
 - Extends `JpaRepository<ShortUrl, String>`

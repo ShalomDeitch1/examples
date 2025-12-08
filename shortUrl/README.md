@@ -47,3 +47,31 @@ graph LR
 **Remaining Issues:**
 * **Latency:** Database calls are significantly slower than memory access.
 * **Bottleneck:** The database becomes a central point of failure and a performance bottleneck under high load.
+
+---
+
+## 3. Internal Cached Version
+
+To mitigate the latency introduced by the database, we add an **Internal (In-Memory) Cache**. Frequently accessed URLs are stored in the application's memory.
+
+[Link to Project](./internalCachedVersion)
+
+```mermaid
+graph LR
+    User -- Request Short URL --> App[Application]
+    App -- Check Cache --> Cache{(Internal Cache)}
+    Cache -- Hit --> App
+    Cache -- Miss --> DB[(Relational Database)]
+    DB -- Data --> Cache
+    App -- Response --> User
+```
+
+**Improvements:**
+* **Performance:** Read operations are fast (Memory speed) for cached items.
+* **Reduced DB Load:** Fewer requests hit the database.
+
+**Remaining Issues:**
+* **Consistency:** If multiple application instances are running, one might update/delete a record (clearing its own cache), but other instances will still hold the **stale** data in their caches until the TTL expires.
+* **Memory Limit:** Cache size is limited by the application's heap.
+
+
