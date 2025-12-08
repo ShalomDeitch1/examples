@@ -26,7 +26,8 @@ class CachePerformanceTest {
         // 1. Create Short URL
         Map<String, String> request = Map.of("url", "https://performance.com");
         ResponseEntity<Map> createResponse = restTemplate.postForEntity("/shorturl", request, Map.class);
-        String shortId = (String) createResponse.getBody().get("shortUrl");
+        String fullUrl = (String) createResponse.getBody().get("shortUrl");
+        String shortId = extractShortId(fullUrl);
 
         // 2. Configure Delay (e.g., 500ms) to make DB slow
         restTemplate.postForEntity("/shorturl/config/delay?min=500&max=500", null, Void.class);
@@ -48,5 +49,10 @@ class CachePerformanceTest {
         // Should be VERY fast (e.g., < 50ms), definitely much faster than delay
         assertThat(duration2).isLessThan(100);
         assertThat(duration2).isLessThan(duration1);
+    }
+
+    private String extractShortId(String fullUrl) {
+        // Extract the last segment of the URL path
+        return fullUrl.substring(fullUrl.lastIndexOf('/') + 1);
     }
 }

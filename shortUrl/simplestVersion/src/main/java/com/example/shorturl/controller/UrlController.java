@@ -1,10 +1,12 @@
 package com.example.shorturl.controller;
 
 import com.example.shorturl.service.UrlService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
 import java.util.Map;
@@ -13,6 +15,9 @@ import java.util.Map;
 public class UrlController {
 
     private final UrlService urlService;
+
+    @Value("${shorturl.base-url:}")
+    private String baseUrl;
 
     public UrlController(UrlService urlService) {
         this.urlService = urlService;
@@ -26,7 +31,8 @@ public class UrlController {
         }
 
         String shortId = urlService.shorten(originalUrl);
-        return ResponseEntity.ok(Map.of("shortUrl", shortId));
+        String shortUrl = buildShortUrl(shortId);
+        return ResponseEntity.ok(Map.of("shortUrl", shortUrl));
     }
 
     @GetMapping("/{shortId}")
@@ -36,5 +42,15 @@ public class UrlController {
                         .location(URI.create(url))
                         .<Void>build())
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    private String buildShortUrl(String shortId) {
+        if (baseUrl != null && !baseUrl.isEmpty()) {
+            return baseUrl + "/" + shortId;
+        }
+        // Fallback: build from current request
+        return ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/" + shortId)
+                .toUriString();
     }
 }

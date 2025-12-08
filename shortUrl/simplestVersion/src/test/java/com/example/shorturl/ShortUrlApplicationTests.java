@@ -45,7 +45,10 @@ class ShortUrlApplicationTests {
     @Order(2)
     void resolveShortUrl() {
         assertThat(createdShortUrl).isNotNull();
-        ResponseEntity<Void> response = restTemplate.getForEntity("/" + createdShortUrl, Void.class);
+        // Extract the short ID from the full URL (e.g., "http://localhost:8080/abc123"
+        // -> "abc123")
+        String shortId = extractShortId(createdShortUrl);
+        ResponseEntity<Void> response = restTemplate.getForEntity("/" + shortId, Void.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FOUND);
         assertThat(response.getHeaders().getLocation()).hasToString("https://google.com");
@@ -62,10 +65,16 @@ class ShortUrlApplicationTests {
         // but the UrlService inside the NEW context should be empty.
 
         assertThat(createdShortUrl).isNotNull();
+        String shortId = extractShortId(createdShortUrl);
 
-        ResponseEntity<Void> response = restTemplate.getForEntity("/" + createdShortUrl, Void.class);
+        ResponseEntity<Void> response = restTemplate.getForEntity("/" + shortId, Void.class);
 
         // Step 1 Expectation: Data is LOST, so we should get 404.
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    private String extractShortId(String fullUrl) {
+        // Extract the last segment of the URL path
+        return fullUrl.substring(fullUrl.lastIndexOf('/') + 1);
     }
 }

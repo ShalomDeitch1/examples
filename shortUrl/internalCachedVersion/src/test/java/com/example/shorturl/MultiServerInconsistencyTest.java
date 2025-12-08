@@ -52,7 +52,8 @@ public class MultiServerInconsistencyTest {
                     "http://localhost:" + portA + "/shorturl",
                     Map.of("url", itemUrl),
                     Map.class);
-            String shortId = (String) createResp.getBody().get("shortUrl");
+            String fullUrl = (String) createResp.getBody().get("shortUrl");
+            String shortId = extractShortId(fullUrl);
             assertThat(shortId).isNotNull();
 
             // 2. Read on Server A (Populates Cache A)
@@ -109,5 +110,10 @@ public class MultiServerInconsistencyTest {
 
     private int getPort(ConfigurableApplicationContext context) {
         return context.getEnvironment().getProperty("local.server.port", Integer.class);
+    }
+
+    private String extractShortId(String fullUrl) {
+        // Extract the last segment of the URL path
+        return fullUrl.substring(fullUrl.lastIndexOf('/') + 1);
     }
 }

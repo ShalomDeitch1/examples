@@ -102,4 +102,86 @@ graph LR
 * **Availability:** Redis becomes another critical component. If Redis goes down, load spikes on the DB.
 * **Network Latency:** Accessing Redis is slower than internal memory (but much faster than DB).
 
+---
+
+## Architectural Notes & Future Improvements
+
+### Short ID Generation
+All current implementations use a **UUID-based approach** that generates random IDs and checks for collisions. This has performance issues:
+
+**Current Approach:**
+```java
+do {
+    shortId = generateShortId();  // Generate random UUID-based short ID
+} while (repository.existsById(shortId));  // Check if it exists
+```
+
+**Problems:**
+1. **Database Round Trip:** Each collision requires a database query
+2. **Index Required:** Needs index on `short_id` column for acceptable performance
+3. **Increasing Collision Rate:** As the database fills, collision probability increases
+4. **Not Scalable:** Multiple instances could generate the same ID simultaneously
+
+**Better Approaches:**
+1. **Counter-Based IDs:** Use a database sequence or distributed counter (e.g., Redis INCR)
+   - Pros: No collisions, O(1) generation
+   - Cons: Sequential IDs may be predictable
+2. **Snowflake IDs:** Combine timestamp + worker ID + sequence
+   - Pros: Distributed-safe, time-ordered, no central coordination
+   - Cons: Longer IDs (64-bit)
+3. **Base62 Encoding of Auto-Increment:** Use database auto-increment, encode in Base62
+   - Pros: Short, guaranteed unique
+   - Cons: Requires database round-trip for ID generation
+
+### Read/Write Traffic Separation
+
+URL shorteners have **highly asymmetric traffic**:
+- **Writes (shortening URLs):** Low volume (maybe 1% of traffic)
+- **Reads (redirects):** High volume (99% of traffic)
+
+**Current Implementation:**
+All versions use a single service handling both reads and writes. This works for small scale but becomes a bottleneck.
+
+**Production Architecture Should Separate:**
+
+```mermaid
+graph TB
+    Users[Users/Clients]
+    
+    Users -->|POST /api/shorten<br/>Low Volume| WriteLB[Write Load Balancer]
+    Users -->|GET /:shortId<br/>High Volume| ReadLB[Read Load Balancer]
+    
+    WriteLB --> WriteService1[Write Service 1]
+    WriteLB --> WriteService2[Write Service 2]
+    
+    ReadLB --> ReadService1[Read Service 1]
+    ReadLB --> ReadService2[Read Service 2]
+    ReadLB --> ReadService3[Read Service 3]
+    
+    WriteService1 --> MasterDB[(Master Database)]
+    WriteService2 --> MasterDB
+    
+    MasterDB -->|Replication| ReadReplica1[(Read Replica 1)]
+    MasterDB -->|Replication| ReadReplica2[(Read Replica 2)]
+    
+    ReadService1 --> Redis[(Shared Cache)]
+    ReadService2 --> Redis
+    ReadService3 --> Redis
+    
+    Redis -.->|Cache Miss| ReadReplica1
+    Redis -.->|Cache Miss| ReadReplica2
+```
+
+**Benefits:**
+- **Independent Scaling:** Scale read services independently (horizontally) based on traffic
+- **Resource Optimization:** Read services can be stateless, lightweight
+- **Availability:** Read services can fall back to replicas if cache fails
+- **Performance:** Read path optimized for speed (cache-first), write path optimized for consistency
+- **Cost Efficiency:** Fewer write instances needed
+
+**Implementation:**
+- Different spring-boot applications or modules
+- Separate deployment/scaling policies
+- Different URL paths: `/api/shorten` (write) vs `/:shortId` (read)
+
 

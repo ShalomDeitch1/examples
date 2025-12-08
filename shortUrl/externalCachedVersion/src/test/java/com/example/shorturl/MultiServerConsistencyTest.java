@@ -62,7 +62,8 @@ public class MultiServerConsistencyTest {
                     "http://localhost:" + portA + "/shorturl",
                     Map.of("url", itemUrl),
                     Map.class);
-            String shortId = (String) createResp.getBody().get("shortUrl");
+            String fullUrl = (String) createResp.getBody().get("shortUrl");
+            String shortId = extractShortId(fullUrl);
 
             // 2. Read on Server A (Populates Redis)
             System.out.println("Reading from Server A (Populating Redis)...");
@@ -106,5 +107,10 @@ public class MultiServerConsistencyTest {
 
     private int getPort(ConfigurableApplicationContext context) {
         return context.getEnvironment().getProperty("local.server.port", Integer.class);
+    }
+
+    private String extractShortId(String fullUrl) {
+        // Extract the last segment of the URL path
+        return fullUrl.substring(fullUrl.lastIndexOf('/') + 1);
     }
 }
