@@ -25,12 +25,13 @@ class ReadDelayIntegrationTest {
         Map<String, String> request = Map.of("url", "https://example.com");
         ResponseEntity<Map> createResponse = restTemplate.postForEntity("/shorturl", request, Map.class);
         assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        String shortUrl = (String) createResponse.getBody().get("shortUrl");
+        String fullUrl = (String) createResponse.getBody().get("shortUrl");
+        String shortId = extractShortId(fullUrl);
 
         // 2. Warmup & Access without delay (Should be fast)
-        restTemplate.getForEntity("/shorturl/" + shortUrl, Void.class); // Warmup
+        restTemplate.getForEntity("/shorturl/" + shortId, Void.class); // Warmup
         long start = System.currentTimeMillis();
-        restTemplate.getForEntity("/shorturl/" + shortUrl, Void.class);
+        restTemplate.getForEntity("/shorturl/" + shortId, Void.class);
         long durationWithoutDelay = System.currentTimeMillis() - start;
         System.out.println("Duration without delay: " + durationWithoutDelay + "ms");
 
@@ -44,7 +45,7 @@ class ReadDelayIntegrationTest {
 
         // 4. Access with delay
         start = System.currentTimeMillis();
-        restTemplate.getForEntity("/shorturl/" + shortUrl, Void.class);
+        restTemplate.getForEntity("/shorturl/" + shortId, Void.class);
         long durationWithDelay = System.currentTimeMillis() - start;
         System.out.println("Duration with delay: " + durationWithDelay + "ms");
 
@@ -57,5 +58,10 @@ class ReadDelayIntegrationTest {
 
         // 6. Reset Delay
         restTemplate.postForEntity("/shorturl/config/delay?min=0&max=0", null, Void.class);
+    }
+
+    private String extractShortId(String fullUrl) {
+        // Extract the last segment of the URL path
+        return fullUrl.substring(fullUrl.lastIndexOf('/') + 1);
     }
 }

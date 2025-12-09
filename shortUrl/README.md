@@ -149,7 +149,7 @@ graph TB
     Users[Users/Clients]
     
     Users -->|POST /api/shorten<br/>Low Volume| WriteLB[Write Load Balancer]
-    Users -->|GET /:shortId<br/>High Volume| ReadLB[Read Load Balancer]
+    Users -->|GET http://short.url/abc123<br/>High Volume - 302 Redirect| ReadLB[Read Load Balancer]
     
     WriteLB --> WriteService1[Write Service 1]
     WriteLB --> WriteService2[Write Service 2]
@@ -182,6 +182,7 @@ graph TB
 **Implementation:**
 - Different spring-boot applications or modules
 - Separate deployment/scaling policies
-- Different URL paths: `/api/shorten` (write) vs `/:shortId` (read)
+- Write endpoint: `POST /api/shorten` → returns `http://short.url/abc123`
+- Read endpoint: `GET http://short.url/abc123` → 302 redirect to original URL
 
 
