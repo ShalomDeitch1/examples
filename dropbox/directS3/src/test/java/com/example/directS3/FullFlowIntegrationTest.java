@@ -217,11 +217,27 @@ class FullFlowIntegrationTest {
     // 2. Put
     externalRestTemplate.put(java.net.URI.create(initResp.uploadUrl()), new HttpEntity<>(largeContent));
 
-    // 3. Complete (via webhook this time for fairness? or manual? Manual is
-    // distinct http call)
-    // Let's use manual complete endpoint for speed in test, assuming notification
-    // is async decoupled
-    restTemplate.postForObject("/api/files/" + initResp.fileId() + "/complete", null, Void.class);
+    // 3. Simulate S3 Event Notification instead of calling removed /complete endpoint
+    FileMetadata saved = repository.findById(initResp.fileId()).orElseThrow();
+    String s3Key2 = saved.getS3Key();
+
+    String s3EventJson2 = """
+        {
+          "Records": [
+            {
+              "s3": {
+                "object": {
+                  "key": "%s"
+                }
+              }
+            }
+          ]
+        }
+        """.formatted(s3Key2);
+
+    HttpHeaders webhookHeaders2 = new HttpHeaders();
+    webhookHeaders2.setContentType(MediaType.APPLICATION_JSON);
+    restTemplate.postForEntity("/api/hooks/s3", new HttpEntity<>(s3EventJson2, webhookHeaders2), Void.class);
 
     long durationDirect = System.nanoTime() - startDirect;
     System.out.println("Direct Upload took: " + TimeUnit.NANOSECONDS.toMillis(durationDirect) + " ms");

@@ -1,7 +1,6 @@
 package com.example.directS3.controller;
 
 import com.example.directS3.model.FileMetadata;
-import com.example.directS3.model.FileStatus;
 import com.example.directS3.repository.FileMetadataRepository;
 import com.example.directS3.service.FileService;
 import org.springframework.stereotype.Controller;
@@ -9,9 +8,6 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
@@ -46,22 +42,9 @@ public class WebController {
         return "ui/upload";
     }
 
-    @PostMapping("/ui/upload")
-    public String handleUpload(@RequestParam("file") MultipartFile file) throws Exception {
-        String key = UUID.randomUUID().toString();
-        PutObjectRequest por = PutObjectRequest.builder()
-                .bucket(fileService.bucketName)
-                .key(key)
-                .contentType(file.getContentType())
-                .build();
-
-        s3Client.putObject(por, RequestBody.fromBytes(file.getBytes()));
-
-        FileMetadata meta = new FileMetadata(file.getOriginalFilename(), file.getSize(), key, FileStatus.AVAILABLE);
-        repository.save(meta);
-
-        return "redirect:/ui";
-    }
+    // Upload is handled client-side using a presigned PUT URL from the server.
+    // The client POSTs to /api/files/upload/init to get the presigned URL, PUTs the file to S3,
+    // then may call /api/files/{id}/complete to mark completion.
 
     @GetMapping("/ui/download/{id}")
     public String download(@PathVariable UUID id) {

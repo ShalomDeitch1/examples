@@ -30,7 +30,8 @@ This project implements Stage 2 of the Dropbox system design, featuring direct f
   - Returns: `{ "fileId": "...", "uploadUrl": "http://..." }`
 - `PUT [uploadUrl]`
   - Body: File content
-- `POST /api/files/{id}/complete`
-  - Updates status to AVAILABLE (Simulates S3 event)
+- Note: The server relies on S3 -> SNS -> SQS notifications to mark uploads AVAILABLE. There is no manual `/api/files/{id}/complete` endpoint.
+
+Reconciliation behavior: if a client uploads directly to S3 without first calling the `upload/init` endpoint, the application will reconcile on the S3 notification. When the SQS listener processes the S3 event it will create a minimal metadata record for the object (using the S3 key) and mark it AVAILABLE so the file becomes visible in the application. This keeps the system tolerant of clients that skip the init/complete sequence but does not capture original filename/size unless the client performed `init` beforehand.
 - `GET /api/files/{id}`
   - Returns: `{ "metadata": {...}, "downloadUrl": "http://..." }`

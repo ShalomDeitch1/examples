@@ -84,10 +84,16 @@ public class FileService {
 
     // This method would be called by the S3 Event Notification listener
     public void markAsAvailable(String s3Key) {
-        FileMetadata metadata = repository.findFirstByS3Key(s3Key)
-                .orElseThrow(() -> new RuntimeException("Metadata not found for s3Key: " + s3Key));
-
-        metadata.setStatus(FileStatus.AVAILABLE);
+        var maybe = repository.findFirstByS3Key(s3Key);
+        FileMetadata metadata;
+        if (maybe.isPresent()) {
+            metadata = maybe.get();
+            metadata.setStatus(FileStatus.AVAILABLE);
+        } else {
+            // Reconcile: create minimal metadata record if client skipped init
+            String inferredName = s3Key;
+            metadata = new FileMetadata(inferredName, 0L, s3Key, FileStatus.AVAILABLE);
+        }
         repository.save(metadata);
     }
 
@@ -102,5 +108,10 @@ public class FileService {
     }
 
     public record DownloadResponse(FileMetadata metadata, String downloadUrl) {
+    }
+
+    // Expose bucket name for components that need to interact directly with S3
+    public String getBucketName() {
+        return bucketName;
     }
 }

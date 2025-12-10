@@ -5,11 +5,34 @@
   <title>Upload File</title>
  </head>
 <body>
-  <h1>Upload</h1>
-  <form method="post" enctype="multipart/form-data" th:action="@{/ui/upload}">
-    <input type="file" name="file" />
-    <button type="submit">Upload</button>
-  </form>
+  <h1 style="font-size:20px;">Upload</h1>
+  <input type="file" id="fileInput" />
+  <button id="uploadBtn">Upload</button>
   <p><a th:href="@{/ui}">Back</a></p>
+
+  <script>
+    document.getElementById('uploadBtn').addEventListener('click', async () => {
+      const input = document.getElementById('fileInput');
+      if (!input.files.length) { alert('Choose a file'); return; }
+      const file = input.files[0];
+
+      // 1. Init
+      const initResp = await fetch('/api/files/upload/init', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({fileName: file.name, size: file.size})
+      });
+      const body = await initResp.json();
+      const uploadUrl = body.uploadUrl;
+      const fileId = body.fileId;
+
+      // 2. PUT to presigned URL
+      const putResp = await fetch(uploadUrl, { method: 'PUT', body: file });
+      if (!putResp.ok) { alert('Upload failed: ' + putResp.status); return; }
+
+      // No manual completion; S3 notifications will mark availability.
+      // Redirect back to list — availability will become visible after notification processed.
+      window.location = '/ui';
+    });
+  </script>
 </body>
 </html>

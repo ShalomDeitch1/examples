@@ -33,6 +33,9 @@ public class MessagingInitializer {
     private final SqsClient sqsClient;
     private final S3Client s3Client;
 
+    @org.springframework.beans.factory.annotation.Value("${aws.s3.bucket}")
+    private String bucketName;
+
     public MessagingInitializer(SnsClient snsClient, SqsClient sqsClient, S3Client s3Client) {
         this.snsClient = snsClient;
         this.sqsClient = sqsClient;
@@ -65,12 +68,19 @@ public class MessagingInitializer {
             snsClient.subscribe(SubscribeRequest.builder().topicArn(topicArn).protocol("sqs").endpoint(queueArn).build());
             log.info("Subscribed queue {} to topic {}", queueArn, topicArn);
 
+            // Ensure the bucket exists (create if missing)
+            try {
+                s3Client.createBucket(b -> b.bucket(bucketName));
+                log.info("Created bucket {}", bucketName);
+            } catch (Exception e) {
+                log.info("Bucket {} may already exist or could not be created: {}", bucketName, e.getMessage());
+            }
+
             // Configure S3 bucket notifications to the topic (ObjectCreated:Put)
             TopicConfiguration topicConfig = TopicConfiguration.builder().topicArn(topicArn).events(Event.S3_OBJECT_CREATED_PUT).build();
             NotificationConfiguration notif = NotificationConfiguration.builder().topicConfigurations(topicConfig).build();
-            // Note: bucket name is expected to be 'test-bucket' in this example; in prod read from properties
             s3Client.putBucketNotificationConfiguration(PutBucketNotificationConfigurationRequest.builder()
-                    .bucket("test-bucket").notificationConfiguration(notif).build());
+                    .bucket(bucketName).notificationConfiguration(notif).build());
 
             log.info("Configured S3 bucket notifications to SNS topic");
         } catch (Exception e) {
