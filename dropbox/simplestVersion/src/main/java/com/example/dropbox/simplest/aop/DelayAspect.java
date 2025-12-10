@@ -1,40 +1,43 @@
 package com.example.dropbox.simplest.aop;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-import java.util.Random;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
 
 @Aspect
 @Component
 public class DelayAspect {
 
     private static final Logger log = LoggerFactory.getLogger(DelayAspect.class);
-    private final Random random = new Random();
 
-    @Target(ElementType.METHOD)
-    @Retention(RetentionPolicy.RUNTIME)
-    public @interface SimulateLatency {
-        long minMs() default 100;
-        long maxMs() default 500;
-    }
+    @Around("execution(* com.example.dropbox.simplest.service.FileService.uploadFile(..))")
+    public Object addUploadLatency(ProceedingJoinPoint joinPoint) throws Throwable {
+        Object[] args = joinPoint.getArgs();
+        long fileSize = 0;
 
-    @Around("@annotation(latency)")
-    public Object addLatency(ProceedingJoinPoint joinPoint, SimulateLatency latency) throws Throwable {
-        long delay = random.nextLong(latency.minMs(), latency.maxMs());
-        log.info("Simulating latency of {}ms for {}", delay, joinPoint.getSignature().getName());
+        for (Object arg : args) {
+            if (arg instanceof MultipartFile) {
+                fileSize = ((MultipartFile) arg).getSize();
+                break;
+            }
+        }
+
+        // Formula: 5 * file-size * 10 ms
+        // For a 100 byte file: 5 * 100 * 10 = 5000ms = 5s
+        long delay = 5 * fileSize * 10;
+
+        log.info("Simulating upload latency of {}ms for file size {} bytes", delay, fileSize);
+
         try {
             Thread.sleep(delay);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+
         return joinPoint.proceed();
     }
 }
