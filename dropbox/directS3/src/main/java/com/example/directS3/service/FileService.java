@@ -1,22 +1,28 @@
 package com.example.directS3.service;
 
-import com.example.directS3.model.FileMetadata;
-import com.example.directS3.model.FileStatus;
-import com.example.directS3.repository.FileMetadataRepository;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
-import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
-
 import java.net.URL;
 import java.time.Duration;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import com.example.directS3.model.FileMetadata;
+import com.example.directS3.model.FileStatus;
+import com.example.directS3.repository.FileMetadataRepository;
+
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+
 @Service
 public class FileService {
+
+    private static final Logger log = LoggerFactory.getLogger(FileService.class);
 
     private final FileMetadataRepository repository;
     private final S3Presigner s3Presigner;
@@ -46,6 +52,7 @@ public class FileService {
                 .build();
 
         URL presignedUrl = s3Presigner.presignPutObject(presignRequest).url();
+        log.info("Generated presigned PUT URL: {}", presignedUrl);
 
         return new UploadResponse(metadata.getId(), presignedUrl.toString());
     }
@@ -77,12 +84,11 @@ public class FileService {
 
     // This method would be called by the S3 Event Notification listener
     public void markAsAvailable(String s3Key) {
-        // Find by s3Key not efficient without index/query, but doable.
-        // Assuming we need to find the metadata.
-        // For simplicity, let's assume we can find it.
-        // Ideally, we'd store the custom metadata 'file-id' in S3 object to correlate
-        // easily.
-        // Or query by S3Key.
+        FileMetadata metadata = repository.findFirstByS3Key(s3Key)
+                .orElseThrow(() -> new RuntimeException("Metadata not found for s3Key: " + s3Key));
+
+        metadata.setStatus(FileStatus.AVAILABLE);
+        repository.save(metadata);
     }
 
     // Helper to update status directly for simulation if needed

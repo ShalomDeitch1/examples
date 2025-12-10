@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import java.util.UUID;
 
 @Entity
+@Table(name = "file_metadata", indexes = @Index(name = "idx_s3_key", columnList = "s3Key"))
 public class FileMetadata {
 
     @Id
