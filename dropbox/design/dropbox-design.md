@@ -30,6 +30,18 @@ In this version, the client uploads the file directly to the application server.
 ### Design
 
 ```mermaid
+flowchart TD
+    Client[Client Device]
+    AppServer[Application Server]
+    DB[(Database)]
+    S3[S3 Storage]
+
+    Client -- .1. Upload File + Metadata. --> AppServer
+    AppServer -- .2. Store Metadata. --> DB
+    AppServer -- .3. Upload File. --> S3
+```
+
+```mermaid
 sequenceDiagram
     participant Client
     participant AppServer
@@ -66,6 +78,21 @@ sequenceDiagram
 To solve the double bandwidth and blocking issues, the client uploads files directly to S3 using a presigned URL.
 
 ### Design
+
+```mermaid
+flowchart TD
+    Client[Client Device]
+    AppServer[Application Server]
+    DB[(Database)]
+    S3[S3 Storage]
+
+    Client -- .1. Init Upload. --> AppServer
+    AppServer -- .2. Save Metadata (Pending). --> DB
+    AppServer -- .3. Return Presigned URL. --> Client
+    Client -- .4. Upload File. --> S3
+    S3 -. .Async Notification. .-> AppServer
+    AppServer -- .5. Update Metadata (Available). --> DB
+```
 
 ```mermaid
 sequenceDiagram
@@ -124,6 +151,21 @@ For large files and sync efficiency, we split files into chunks. We use fingerpr
 *   Server replies with list of missing chunks.
 *   Client uploads only missing chunks.
 *   Metadata stores the "Recipe" (list of chunks) for the file.
+
+```mermaid
+flowchart TD
+    Client[Client Device]
+    AppServer[Application Server]
+    DB[(Database)]
+    S3[S3 Storage]
+
+    Client -- .1. Check Chunks (Hashes). --> AppServer
+    AppServer -- .2. Check Existance. --> DB
+    AppServer -- .3. Return Missing Chunks. --> Client
+    Client -- .4. Upload Missing Chunks. --> S3
+    Client -- .5. Finalize (Recipe). --> AppServer
+    AppServer -- .6. Save Recipe. --> DB
+```
 
 ```mermaid
 sequenceDiagram
@@ -199,6 +241,21 @@ The client runs a local file watcher. When a file is modified locally:
 We use a Polling model for the simulation (Simulating a message queue buffer).
 *   When a file is updated, the Server publishes an event to an SQS Queue unique to the client (or filtered).
 *   Clients periodically **poll** their queue for updates.
+
+```mermaid
+flowchart TD
+    ClientA["Client A (Uploader)"]
+    ClientB["Client B (Receiver)"]
+    AppServer[Application Server]
+    SNS[SNS Topic]
+    SQS[SQS Queue]
+
+    ClientA -- .1. Upload File. --> AppServer
+    AppServer -- .2. Publish Event. --> SNS
+    SNS -- .3. Push Message. --> SQS
+    ClientB -- .4. Poll Messages. --> SQS
+    ClientB -- .5. Download Metadata. --> AppServer
+```
 
 ```mermaid
 sequenceDiagram
