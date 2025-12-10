@@ -40,6 +40,13 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.NotificationConfiguration;
+import software.amazon.awssdk.services.s3.model.PutBucketNotificationConfigurationRequest;
+import software.amazon.awssdk.services.s3.model.TopicConfiguration;
+import software.amazon.awssdk.services.s3.model.Event;
+import software.amazon.awssdk.services.sns.SnsClient;
+import software.amazon.awssdk.services.sns.model.CreateTopicRequest;
+import software.amazon.awssdk.services.sns.model.SubscribeRequest;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
@@ -105,6 +112,28 @@ class FullFlowIntegrationTest {
     String uploadUrl = body.uploadUrl();
     UUID fileId = body.fileId();
 
+    // --- Configure LocalStack to forward S3 events to our app via SNS -> HTTP
+    SnsClient sns = SnsClient.builder()
+      .endpointOverride(localStack.getEndpointOverride(LocalStackContainer.Service.SNS))
+      .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(localStack.getAccessKey(), localStack.getSecretKey())))
+      .region(Region.of(localStack.getRegion()))
+      .build();
+
+    String topicArn = sns.createTopic(CreateTopicRequest.builder().name("s3-notif-" + UUID.randomUUID()).build()).topicArn();
+    String callback = "http://host.testcontainers.internal:" + port + "/api/hooks/s3";
+    sns.subscribe(SubscribeRequest.builder().topicArn(topicArn).protocol("http").endpoint(callback).build());
+
+    S3Client s3ForNotif = S3Client.builder()
+      .endpointOverride(localStack.getEndpointOverride(LocalStackContainer.Service.S3))
+      .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(localStack.getAccessKey(), localStack.getSecretKey())))
+      .region(Region.of(localStack.getRegion()))
+      .build();
+
+    TopicConfiguration topicConfig = TopicConfiguration.builder().topicArn(topicArn).events(Event.S3_OBJECT_CREATED_PUT).build();
+    NotificationConfiguration notif = NotificationConfiguration.builder().topicConfigurations(topicConfig).build();
+    s3ForNotif.putBucketNotificationConfiguration(PutBucketNotificationConfigurationRequest.builder()
+      .bucket("test-bucket").notificationConfiguration(notif).build());
+
     // 2. Client Uploads to S3 (using the presigned URL)
     HttpHeaders headers = new HttpHeaders();
     // S3 Presigned URLs usually don't strictly require Content-Type unless signed
@@ -144,6 +173,12 @@ class FullFlowIntegrationTest {
         FileService.DownloadResponse.class);
     assertThat(downloadResp.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(downloadResp.getBody().downloadUrl()).contains("test-bucket");
+
+    // Verify the object is downloadable directly from S3 and contains the expected content
+    String downloadUrl = downloadResp.getBody().downloadUrl();
+    ResponseEntity<byte[]> s3Get = externalRestTemplate.getForEntity(java.net.URI.create(downloadUrl), byte[].class);
+    assertThat(s3Get.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(new String(s3Get.getBody(), StandardCharsets.UTF_8)).isEqualTo(content);
   }
 
   @Test
