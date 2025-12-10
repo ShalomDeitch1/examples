@@ -48,4 +48,14 @@ public class S3Config {
                 .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
                 .build();
     }
+
+        @Bean
+        public S3Client s3ClientBean() {
+                return S3Client.builder()
+                                .endpointOverride(URI.create(endpoint))
+                                .region(Region.of(region))
+                                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKeyId, secretAccessKey)))
+                                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                                .build();
+        }
 }

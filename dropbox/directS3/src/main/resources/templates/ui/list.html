@@ -1,0 +1,24 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Dropbox - Files</title>
+</head>
+<body>
+  <h1>Files</h1>
+  <p><a th:href="@{/ui/upload}">Upload new file</a></p>
+  <table border="1">
+    <tr><th>ID</th><th>Name</th><th>Size</th><th>Status</th><th>Actions</th></tr>
+    <tr th:each="f : ${files}">
+      <td th:text="${f.id}"></td>
+      <td th:text="${f.fileName}"></td>
+      <td th:text="${f.size}"></td>
+      <td th:text="${f.status}"></td>
+      <td>
+        <a th:href="@{/ui/download/{id}(id=${f.id})}">Download</a>
+        <span th:if="${f.status.name() == 'AVAILABLE'}"> | <a th:href="@{/ui/view/{id}(id=${f.id})}">View</a></span>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

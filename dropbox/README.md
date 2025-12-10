@@ -137,6 +137,73 @@ sequenceDiagram
 *   **Complexity**: Requires handling async notifications from S3.
 *   **Consistency**: What if the upload fails? The DB might have a stale "PENDING" record.
 
+### Recommended Notification Flow (Production)
+
+To make the notification path durable and production-ready we recommend S3 -> SNS -> SQS -> Consumer. This keeps a reliable queue for consumers and allows fan-out via SNS if multiple subscribers are needed.
+
+```mermaid
+flowchart TD
+        S3[S3] -->|ObjectCreated| SNS[SNS Topic]
+        SNS --> SQS[SQS Queue]
+        SQS --> AppServer[Application Consumer]
+```
+
+Sequence (S3 -> SNS -> SQS):
+
+```mermaid
+sequenceDiagram
+        participant S3
+        participant SNS
+        participant SQS
+        participant App
+
+        S3->>SNS: Publish ObjectCreated event
+        SNS-->>SQS: Deliver Notification
+        App->>SQS: Poll & Receive Message
+        App->>App: Parse SNS envelope -> Extract S3 key
+        App->>DB: Update metadata status (AVAILABLE)
+```
+
+Notification payloads:
+
+ - Direct S3 event (inside `Message` for SNS envelope or as Records for direct SQS):
+
+```json
+{
+    "Records":[
+        {
+            "eventVersion":"2.1",
+            "eventSource":"aws:s3",
+            "awsRegion":"us-east-1",
+            "eventName":"ObjectCreated:Put",
+            "s3":{
+                "bucket":{"name":"test-bucket"},
+                "object":{"key":"09ba5a75-c02d-4d57-b020-1d2016ce1d16"}
+            }
+        }
+    ]
+}
+```
+
+ - SNS envelope (what SQS receives when subscribed to SNS):
+
+```json
+{
+    "Type":"Notification",
+    "MessageId":"...",
+    "TopicArn":"arn:aws:sns:...",
+    "Message":"{ \"Records\":[ { \"s3\":{ \"object\":{ \"key\":\"...\" } } } ] }"
+}
+```
+
+You can inspect messages in LocalStack using the AWS CLI with the `--endpoint-url` flag, for example:
+
+```bash
+aws --endpoint-url=http://localhost:4566 sns list-topics
+aws --endpoint-url=http://localhost:4566 sqs list-queues
+aws --endpoint-url=http://localhost:4566 sqs receive-message --queue-url http://localhost:4566/000000000000/your-queue
+```
+
 ---
 
 ## Stage 3: Chunking & Fingerprinting
