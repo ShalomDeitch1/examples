@@ -36,15 +36,21 @@ public class FileService {
     }
 
     public UploadResponse initUpload(String fileName, long size) {
+        return initUpload(fileName, size, null);
+    }
+
+    // Overload to accept optional contentType from client
+    public UploadResponse initUpload(String fileName, long size, String contentType) {
         String s3Key = UUID.randomUUID().toString();
 
         FileMetadata metadata = new FileMetadata(fileName, size, s3Key, FileStatus.PENDING);
+        if (contentType != null) metadata.setContentType(contentType);
         metadata = repository.save(metadata);
 
         PutObjectRequest objectRequest = PutObjectRequest.builder()
-                .bucket(bucketName)
-                .key(s3Key)
-                .build();
+            .bucket(bucketName)
+            .key(s3Key)
+            .build();
 
         PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
                 .signatureDuration(Duration.ofMinutes(10))
@@ -67,15 +73,24 @@ public class FileService {
             throw new RuntimeException("File is not available yet");
         }
 
+        // Prefer stored contentType from metadata, otherwise infer from filename
+        String contentType = metadata.getContentType();
+        if (contentType == null) {
+            contentType = java.net.URLConnection.guessContentTypeFromName(metadata.getFileName());
+            if (contentType == null) contentType = "application/octet-stream";
+        }
+
         GetObjectRequest objectRequest = GetObjectRequest.builder()
-                .bucket(bucketName)
-                .key(metadata.getS3Key())
-                .build();
+            .bucket(bucketName)
+            .key(metadata.getS3Key())
+            .responseContentType(contentType)
+            .responseContentDisposition("attachment; filename=\"" + metadata.getFileName() + "\"")
+            .build();
 
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(10))
-                .getObjectRequest(objectRequest)
-                .build();
+            .signatureDuration(Duration.ofMinutes(10))
+            .getObjectRequest(objectRequest)
+            .build();
 
         URL presignedUrl = s3Presigner.presignGetObject(presignRequest).url();
 
@@ -102,7 +117,7 @@ public class FileService {
 
     // Helper to update status directly for simulation if needed
     public void updateStatus(UUID id, FileStatus status) {
-        FileMetadata metadata = repository.findById(id).orElseThrow();
+        FileMetadata metadata = repository.findById(id).orElseThrow(() -> new RuntimeException("File not found"));
         metadata.setStatus(status);
         repository.save(metadata);
     }

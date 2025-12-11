@@ -14,9 +14,12 @@ public class FileMetadata {
     private String fileName;
     private long size;
     private String s3Key;
-
+    
     @Enumerated(EnumType.STRING)
     private FileStatus status;
+
+    // optional content type provided by client at init
+    private String contentType;
 
     public FileMetadata() {
     }
@@ -26,6 +29,14 @@ public class FileMetadata {
         this.size = size;
         this.s3Key = s3Key;
         this.status = status;
+    }
+
+    public String getContentType() {
+        return contentType;
+    }
+
+    public void setContentType(String contentType) {
+        this.contentType = contentType;
     }
 
     public UUID getId() {

@@ -21,7 +21,8 @@ public class FileController {
     public ResponseEntity<FileService.UploadResponse> initUpload(@RequestBody Map<String, Object> payload) {
         String fileName = (String) payload.get("fileName");
         long size = ((Number) payload.get("size")).longValue();
-        return ResponseEntity.ok(fileService.initUpload(fileName, size));
+        String contentType = (String) payload.getOrDefault("contentType", null);
+        return ResponseEntity.ok(fileService.initUpload(fileName, size, contentType));
     }
 
     @GetMapping("/{id}")

@@ -5,8 +5,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.example.directS3.service.SqsNotificationListener;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -15,8 +13,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
-
-import java.util.List;
 
 @ExtendWith(MockitoExtension.class)
 class SqsNotificationListenerTest {
@@ -35,13 +31,31 @@ class SqsNotificationListenerTest {
     @Test
     void poll_parsesSnsEnvelopeAndMarksAvailable() {
         String queueUrl = "http://local/s3-notif-queue-1";
-            when(sqsClient.listQueues(any(ListQueuesRequest.class))).thenReturn(ListQueuesResponse.builder().queueUrls(queueUrl).build());
+        // ensure the listener will look for the expected queue name suffix
+        try {
+            var f = SqsNotificationListener.class.getDeclaredField("bucketName");
+            f.setAccessible(true);
+            f.set(listener, "1");
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        when(sqsClient.listQueues(any(ListQueuesRequest.class))).thenReturn(ListQueuesResponse.builder().queueUrls(queueUrl).build());
 
         String s3Key = "my%2Ffile.txt"; // url-encoded in S3 event
-        String snsEnvelope = String.format("{\"Message\": \"{\\\"Records\\\":[{\\\"s3\\\":{\\\"object\\\":{\\\"key\\\":\\\"%s\\\"}}}]}\"}", s3Key);
-
-        Message msg = Message.builder().body(snsEnvelope).receiptHandle("rh").build();
+        try {
+            var event = mapper.writeValueAsString(
+                java.util.Map.of("Records", java.util.List.of(
+                    java.util.Map.of("s3", java.util.Map.of(
+                        "object", java.util.Map.of("key", s3Key)
+                    ))
+                )));
+            var envelope = mapper.writeValueAsString(java.util.Map.of("Message", event));
+            Message msg = Message.builder().body(envelope).receiptHandle("rh").build();
             when(sqsClient.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder().messages(msg).build());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
 
         listener.poll();
 

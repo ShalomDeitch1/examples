@@ -28,7 +28,7 @@
         console.log('Initializing upload for:', file.name);
         const initResp = await fetch('/api/files/upload/init', {
           method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({fileName: file.name, size: file.size})
+          body: JSON.stringify({fileName: file.name, size: file.size, contentType: file.type})
         });
         const body = await initResp.json();
         const uploadUrl = body.uploadUrl;
