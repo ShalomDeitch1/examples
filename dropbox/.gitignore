@@ -45,6 +45,9 @@ build/
 ### VS Code ###
 .vscode/
 
+# Ignore repository-level external cache directory (created by local tooling)
+../external-cache/
+
 ### OS ###
 .DS_Store
 Thumbs.db
