@@ -18,43 +18,58 @@
   <p><a th:href="@{/ui}">Back</a></p>
 
   <script>
-    document.getElementById('uploadBtn').addEventListener('click', async () => {
+    async function initializeUpload(file) {
+      console.log('Initializing upload for:', file.name);
+      const initResp = await fetch('/api/files/upload/init', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          fileName: file.name,
+          size: file.size,
+          contentType: file.type
+        })
+      });
+      if (!initResp.ok) {
+        throw new Error('Failed to initialize upload: ' + initResp.status);
+      }
+      const body = await initResp.json();
+      console.log('Got presigned URL:', body.uploadUrl);
+      return { uploadUrl: body.uploadUrl, fileId: body.fileId };
+    }
+
+    async function uploadToS3(uploadUrl, file) {
+      console.log('Uploading to S3...');
+      const putResp = await fetch(uploadUrl, { method: 'PUT', body: file });
+      console.log('S3 PUT response status:', putResp.status);
+      if (!putResp.ok) {
+        const errorText = await putResp.text();
+        console.error('Upload failed:', errorText);
+        throw new Error('Upload failed: ' + putResp.status + ' - ' + errorText);
+      }
+      console.log('Upload successful');
+    }
+
+    async function handleUpload() {
       try {
         const input = document.getElementById('fileInput');
-        if (!input.files.length) { alert('Choose a file'); return; }
+        if (!input.files.length) {
+          alert('Choose a file');
+          return;
+        }
         const file = input.files[0];
 
-        // 1. Init
-        console.log('Initializing upload for:', file.name);
-        const initResp = await fetch('/api/files/upload/init', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({fileName: file.name, size: file.size, contentType: file.type})
-        });
-        const body = await initResp.json();
-        const uploadUrl = body.uploadUrl;
-        const fileId = body.fileId;
-        console.log('Got presigned URL:', uploadUrl);
+        const { uploadUrl, fileId } = await initializeUpload(file);
+        await uploadToS3(uploadUrl, file);
 
-        // 2. PUT to presigned URL
-        console.log('Uploading to S3...');
-        const putResp = await fetch(uploadUrl, { method: 'PUT', body: file });
-        console.log('S3 PUT response status:', putResp.status);
-        if (!putResp.ok) { 
-          const errorText = await putResp.text();
-          console.error('Upload failed:', errorText);
-          alert('Upload failed: ' + putResp.status + ' - ' + errorText); 
-          return; 
-        }
-
-        console.log('Upload successful, redirecting...');
-        // No manual completion; S3 notifications will mark availability.
-        // Redirect back to list — availability will become visible via auto-refresh.
+        console.log('Redirecting to list...');
         window.location = '/ui';
       } catch (error) {
         console.error('Upload error:', error);
         alert('Upload error: ' + error.message);
       }
-    });
+    }
+
+    document.getElementById('uploadBtn').addEventListener('click', handleUpload);
   </script>
 </body>
 </html>

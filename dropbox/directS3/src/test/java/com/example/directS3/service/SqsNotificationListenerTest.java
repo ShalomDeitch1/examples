@@ -1,5 +1,8 @@
 package com.example.directS3.service;
 
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
@@ -50,12 +53,12 @@ class SqsNotificationListenerTest {
         String s3Key = "my%2Ffile.txt"; // url-encoded in S3 event
         try {
             var event = mapper.writeValueAsString(
-                java.util.Map.of("Records", java.util.List.of(
-                    java.util.Map.of("s3", java.util.Map.of(
-                        "object", java.util.Map.of("key", s3Key)
+                Map.of("Records", List.of(
+                    Map.of("s3", Map.of(
+                        "object", Map.of("key", s3Key)
                     ))
                 )));
-            var envelope = mapper.writeValueAsString(java.util.Map.of("Message", event));
+            var envelope = mapper.writeValueAsString(Map.of("Message", event));
             Message msg = Message.builder().body(envelope).receiptHandle("rh").build();
             when(sqsClient.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder().messages(msg).build());
         } catch (Exception e) {
@@ -65,6 +68,50 @@ class SqsNotificationListenerTest {
         listener.poll();
 
         verify(fileService).markAsAvailable("my/file.txt");
-            verify(sqsClient).deleteMessage(any(DeleteMessageRequest.class));
+        verify(sqsClient).deleteMessage(any(DeleteMessageRequest.class));
+    }
+
+    @Test
+    void poll_setsQueueUrlWhenNull() throws Exception {
+        // set bucketName
+        var bucketField = SqsNotificationListener.class.getDeclaredField("bucketName");
+        bucketField.setAccessible(true);
+        bucketField.set(listener, "test");
+
+        when(sqsClient.listQueues(any(ListQueuesRequest.class))).thenReturn(ListQueuesResponse.builder().queueUrls("http://local/s3-notif-queue-test").build());
+        when(sqsClient.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder().build());
+
+        listener.poll();
+
+        assert listener.queueUrl.equals("http://local/s3-notif-queue-test");
+    }
+
+    @Test
+    void processMessage_marksFileAvailable() throws Exception {
+        String event = mapper.writeValueAsString(
+            Map.of("Records", List.of(
+                Map.of("s3", Map.of("object", Map.of("key", "file.txt")))
+            ))
+        );
+        Message msg = Message.builder().body(event).build();
+
+        listener.processMessage(msg);
+
+        verify(fileService).markAsAvailable("file.txt");
+    }
+
+    @Test
+    void processMessage_handlesSnsEnvelope() throws Exception {
+        String s3Event = mapper.writeValueAsString(
+            Map.of("Records", List.of(
+                Map.of("s3", Map.of("object", Map.of("key", "encoded%2Ffile.txt")))
+            ))
+        );
+        String envelope = mapper.writeValueAsString(Map.of("Message", s3Event));
+        Message msg = Message.builder().body(envelope).build();
+
+        listener.processMessage(msg);
+
+        verify(fileService).markAsAvailable("encoded/file.txt");
     }
 }

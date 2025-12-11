@@ -2,16 +2,25 @@ package com.example.directS3.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutBucketNotificationConfigurationRequest;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.model.CreateTopicRequest;
+import software.amazon.awssdk.services.sns.model.CreateTopicResponse;
 import software.amazon.awssdk.services.sns.model.SubscribeRequest;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
+import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
+import software.amazon.awssdk.services.sqs.model.GetQueueAttributesRequest;
+import software.amazon.awssdk.services.sqs.model.GetQueueAttributesResponse;
+import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.SetQueueAttributesRequest;
-
-import static org.mockito.Mockito.*;
 
 class MessagingInitializerTest {
 
@@ -39,9 +48,9 @@ class MessagingInitializerTest {
     @Test
     void initMessaging_createsTopicQueueAndConfiguresNotifications() {
         // Use simple stubbing for createTopic/createQueue/getQueueAttributes
-        when(snsClient.createTopic(any(software.amazon.awssdk.services.sns.model.CreateTopicRequest.class))).thenReturn(software.amazon.awssdk.services.sns.model.CreateTopicResponse.builder().topicArn("arn:aws:sns:us-east-1:000000000000:s3-notif-topic-unittest-bucket").build());
-        when(sqsClient.createQueue(any(software.amazon.awssdk.services.sqs.model.CreateQueueRequest.class))).thenReturn(software.amazon.awssdk.services.sqs.model.CreateQueueResponse.builder().queueUrl("http://localhost/queue").build());
-        when(sqsClient.getQueueAttributes(any(software.amazon.awssdk.services.sqs.model.GetQueueAttributesRequest.class))).thenReturn(software.amazon.awssdk.services.sqs.model.GetQueueAttributesResponse.builder().attributes(java.util.Map.of(software.amazon.awssdk.services.sqs.model.QueueAttributeName.QUEUE_ARN, "arn:aws:sqs:us-east-1:000000000000:queue")).build());
+        when(snsClient.createTopic(any(CreateTopicRequest.class))).thenReturn(CreateTopicResponse.builder().topicArn("arn:aws:sns:us-east-1:000000000000:s3-notif-topic-unittest-bucket").build());
+        when(sqsClient.createQueue(any(CreateQueueRequest.class))).thenReturn(CreateQueueResponse.builder().queueUrl("http://localhost/queue").build());
+        when(sqsClient.getQueueAttributes(any(GetQueueAttributesRequest.class))).thenReturn(GetQueueAttributesResponse.builder().attributes(java.util.Map.of(QueueAttributeName.QUEUE_ARN, "arn:aws:sqs:us-east-1:000000000000:queue")).build());
 
         initializer.initMessaging();
 
