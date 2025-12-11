@@ -89,10 +89,13 @@ public class FileService {
         if (maybe.isPresent()) {
             metadata = maybe.get();
             metadata.setStatus(FileStatus.AVAILABLE);
+            log.info("Marked file as AVAILABLE: {} ({})", metadata.getFileName(), s3Key);
         } else {
             // Reconcile: create minimal metadata record if client skipped init
-            String inferredName = s3Key;
+            // Use S3 key as fallback filename (happens if upload bypassed /init endpoint)
+            String inferredName = s3Key.contains("/") ? s3Key.substring(s3Key.lastIndexOf("/") + 1) : s3Key;
             metadata = new FileMetadata(inferredName, 0L, s3Key, FileStatus.AVAILABLE);
+            log.warn("Reconciled orphaned S3 object: {} -> {}", s3Key, inferredName);
         }
         repository.save(metadata);
     }

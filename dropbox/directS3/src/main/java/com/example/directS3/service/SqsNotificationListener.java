@@ -26,6 +26,9 @@ public class SqsNotificationListener {
     private final FileService fileService;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Value("${aws.s3.bucket}")
+    private String bucketName;
+
     // In this simple implementation we assume the queue URL is discovered/known;
     // For brevity we'll use a fixed prefix search. In a production system store the queue URL.
     private String queueUrl = null;
@@ -34,26 +37,34 @@ public class SqsNotificationListener {
         this.sqsClient = sqsClient;
         this.fileService = fileService;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
+        log.info("SqsNotificationListener initialized - polling will start shortly");
     }
 
     @Scheduled(fixedDelay = 2000)
     public void poll() {
         try {
             if (queueUrl == null) {
-                // find a queue that starts with s3-notif-queue-
+                // find queue with the fixed name matching the bucket
+                String expectedQueueName = "s3-notif-queue-" + bucketName;
                 var urls = sqsClient.listQueues(ListQueuesRequest.builder().build()).queueUrls();
+                log.info("Found {} queues in total, looking for queue containing: {}", urls.size(), expectedQueueName);
                 for (String url : urls) {
-                    if (url.contains("s3-notif-queue-")) {
+                    log.debug("Checking queue URL: {}", url);
+                    if (url.contains(expectedQueueName)) {
                         queueUrl = url;
                         break;
                     }
                 }
-                if (queueUrl == null) return;
+                if (queueUrl == null) {
+                    log.warn("No queue matching '{}' pattern found", expectedQueueName);
+                    return;
+                }
                 log.info("Using SQS queue: {}", queueUrl);
             }
 
             ReceiveMessageRequest req = ReceiveMessageRequest.builder().queueUrl(queueUrl).maxNumberOfMessages(5).waitTimeSeconds(5).build();
             var resp = sqsClient.receiveMessage(req);
+            log.debug("Received {} messages from SQS", resp.messages().size());
             for (Message m : resp.messages()) {
                 try {
                     String body = m.body();

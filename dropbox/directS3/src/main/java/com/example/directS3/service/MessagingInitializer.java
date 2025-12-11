@@ -45,12 +45,12 @@ public class MessagingInitializer {
     @EventListener(ApplicationReadyEvent.class)
     public void initMessaging() {
         try {
-            String topicName = "s3-notif-topic-" + UUID.randomUUID().toString().substring(0, 8);
+            String topicName = "s3-notif-topic-" + bucketName;
             CreateTopicResponse topicResp = snsClient.createTopic(CreateTopicRequest.builder().name(topicName).build());
             String topicArn = topicResp.topicArn();
             log.info("Created/Found SNS topic: {}", topicArn);
 
-            String queueName = "s3-notif-queue-" + UUID.randomUUID().toString().substring(0, 8);
+            String queueName = "s3-notif-queue-" + bucketName;
             String queueUrl = sqsClient.createQueue(CreateQueueRequest.builder().queueName(queueName).build()).queueUrl();
             log.info("Created/Found SQS queue: {}", queueUrl);
 

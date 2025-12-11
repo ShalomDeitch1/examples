@@ -38,7 +38,7 @@ class SqsNotificationListenerTest {
             when(sqsClient.listQueues(any(ListQueuesRequest.class))).thenReturn(ListQueuesResponse.builder().queueUrls(queueUrl).build());
 
         String s3Key = "my%2Ffile.txt"; // url-encoded in S3 event
-        String snsEnvelope = "{\"Message\": \"{\\\"Records\\\":[{\\\"s3\\\":{\\\"object\\\":{\\\"key\\\":\\\"" + s3Key + "\\\"}}}]}\"}";
+        String snsEnvelope = String.format("{\"Message\": \"{\\\"Records\\\":[{\\\"s3\\\":{\\\"object\\\":{\\\"key\\\":\\\"%s\\\"}}}]}\"}", s3Key);
 
         Message msg = Message.builder().body(snsEnvelope).receiptHandle("rh").build();
             when(sqsClient.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder().messages(msg).build());

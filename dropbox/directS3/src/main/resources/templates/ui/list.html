@@ -2,8 +2,15 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="UTF-8">
-  <title>Dropbox - Files</title>
-</head>
+  <title>Dropbox - Files</title>  <style>
+    body { font-size: 16px; font-family: Arial, sans-serif; padding: 20px; }
+    h1 { font-size: 28px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+    th { background-color: #f2f2f2; font-weight: bold; }
+    a { color: #0066cc; text-decoration: none; font-size: 16px; }
+    a:hover { text-decoration: underline; }
+  </style></head>
 <body>
   <h1>Files</h1>
   <p><a th:href="@{/ui/upload}">Upload new file</a></p>
@@ -20,5 +27,14 @@
       </td>
     </tr>
   </table>
+  
+  <script>
+    // Auto-refresh if there are PENDING files
+    const hasPending = Array.from(document.querySelectorAll('td')).some(td => td.textContent === 'PENDING');
+    if (hasPending) {
+      console.log('Found PENDING files, will auto-refresh in 3 seconds');
+      setTimeout(() => window.location.reload(), 3000);
+    }
+  </script>
 </body>
 </html>
