@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
+import software.amazon.awssdk.services.sqs.model.ListQueuesRequest;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 
 import java.net.URLDecoder;
@@ -32,7 +33,7 @@ public class SqsNotificationListener {
     public SqsNotificationListener(SqsClient sqsClient, FileService fileService, ObjectMapper objectMapper) {
         this.sqsClient = sqsClient;
         this.fileService = fileService;
-        this.objectMapper = objectMapper;
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
     }
 
     @Scheduled(fixedDelay = 2000)
@@ -40,7 +41,7 @@ public class SqsNotificationListener {
         try {
             if (queueUrl == null) {
                 // find a queue that starts with s3-notif-queue-
-                var urls = sqsClient.listQueues().queueUrls();
+                var urls = sqsClient.listQueues(ListQueuesRequest.builder().build()).queueUrls();
                 for (String url : urls) {
                     if (url.contains("s3-notif-queue-")) {
                         queueUrl = url;
@@ -86,3 +87,4 @@ public class SqsNotificationListener {
         }
     }
 }
+
