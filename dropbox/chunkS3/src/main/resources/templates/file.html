@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>File</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; max-width: 980px; }
+    code { background: #f3f3f3; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .muted { color: #666; }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 1rem; flex: 1; min-width: 320px; }
+    pre { white-space: pre-wrap; background: #0b1020; color: #e7e7e7; padding: 0.8rem; border-radius: 10px; }
+    button { padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    button.primary { background: #111; color: #fff; border-color: #111; }
+  </style>
+</head>
+<body>
+<p><a href="/files">Back to files</a> | <a href="/">Upload</a></p>
+
+<h1 id="title">File</h1>
+<p class="muted" id="meta"></p>
+
+<div class="row">
+  <div class="card">
+    <h2>Download / Reassemble</h2>
+    <button id="refreshBtn">Refresh status</button>
+    <button id="downloadBtn" class="primary">Download (reassembled)</button>
+    <p class="muted" id="downloadHint"></p>
+    <pre id="preview"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Update this file</h2>
+    <input id="fileInput" type="file"/>
+    <div style="margin-top: 0.75rem;">
+      <button id="uploadBtn" class="primary" disabled>Upload new version</button>
+    </div>
+    <p class="muted">Text updates are line-based; editing line 2 only uploads 1 chunk.</p>
+  </div>
+</div>
+
+<script>
+  const fileId = window.location.pathname.split('/').pop();
+  const titleEl = document.getElementById('title');
+  const metaEl = document.getElementById('meta');
+  const previewEl = document.getElementById('preview');
+  const downloadHintEl = document.getElementById('downloadHint');
+
+  const fileInput = document.getElementById('fileInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+
+  function toHex(buf) {
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function sha256Hex(bytes) {
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return toHex(digest);
+  }
+
+  function isTextType(contentType) {
+    return contentType && contentType.startsWith('text/');
+  }
+
+  async function chunkTextNormalizedLf(text) {
+    const normalized = text.replace(/\r\n/g, '\n');
+    const endsWithNewline = normalized.endsWith('\n');
+    let lines = normalized.split('\n');
+    if (endsWithNewline) lines = lines.slice(0, -1);
+
+    const enc = new TextEncoder();
+    const parts = [];
+    let reassembledSize = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const bytes = enc.encode(lines[i]);
+      const hash = await sha256Hex(bytes);
+      parts.push({ index: i, hash, lengthBytes: bytes.byteLength, bytes });
+      reassembledSize += bytes.byteLength;
+      if (i < lines.length - 1 || endsWithNewline) reassembledSize += 1;
+    }
+    return { parts, endsWithNewline, reassembledSizeBytes: reassembledSize, chunkingStrategy: 'TEXT_LINES_NORMALIZED_LF', textNewlinesNormalized: true };
+  }
+
+  async function chunkBinaryFixed64(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    const parts = [];
+    let idx = 0;
+    for (let offset = 0; offset < bytes.length; offset += 64) {
+      const slice = bytes.slice(offset, Math.min(offset + 64, bytes.length));
+      const hash = await sha256Hex(slice);
+      parts.push({ index: idx++, hash, lengthBytes: slice.byteLength, bytes: slice });
+    }
+    return { parts, endsWithNewline: false, reassembledSizeBytes: bytes.byteLength, chunkingStrategy: 'FIXED_64_BYTES', textNewlinesNormalized: false };
+  }
+
+  async function fetchFiles() {
+    const resp = await fetch('/api/files');
+    return resp.json();
+  }
+
+  async function initUpload(payload) {
+    const resp = await fetch('/api/files/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    return resp.json();
+  }
+
+  async function completeUpload(fileId, versionId, partBytesByHash) {
+    const resp = await fetch(`/api/files/${fileId}/versions/${versionId}/complete`, { method: 'POST' });
+    if (resp.status === 409) {
+      const body = await resp.json();
+      if (body && Array.isArray(body.missingChunks) && body.missingChunks.length > 0) {
+        downloadHintEl.textContent = `Server reports ${body.missingChunks.length} missing unique chunks; re-uploading...`;
+        await uploadMissingChunksByHash(body.missingChunks, partBytesByHash);
+        return completeUpload(fileId, versionId, partBytesByHash);
+      }
+    }
+    if (!resp.ok) throw new Error(await resp.text());
+  }
+
+  async function uploadMissingChunks(missingParts, partBytesByIndex) {
+    for (const mp of missingParts) {
+      const bytes = partBytesByIndex.get(mp.index);
+      const putResp = await fetch(mp.uploadUrl, { method: 'PUT', body: bytes });
+      if (!putResp.ok) throw new Error(`PUT failed index=${mp.index} status=${putResp.status}`);
+    }
+  }
+
+  async function uploadMissingChunksByHash(missingChunks, partBytesByHash) {
+    for (const mc of missingChunks) {
+      const bytes = partBytesByHash.get(mc.hash);
+      if (!bytes) throw new Error('missing bytes for hash ' + mc.hash);
+      const putResp = await fetch(mc.uploadUrl, { method: 'PUT', body: bytes });
+      if (!putResp.ok) throw new Error(`PUT failed hash=${mc.hash} status=${putResp.status}`);
+    }
+  }
+
+  async function refreshMeta() {
+    const files = await fetchFiles();
+    const f = files.find(x => x.id === fileId);
+    if (!f) {
+      titleEl.textContent = 'File not found';
+      metaEl.textContent = '';
+      return null;
+    }
+    titleEl.textContent = f.fileName;
+    metaEl.textContent = `id=${f.id} | status=${f.status} | sizeBytes=${f.sizeBytes} | type=${f.contentType}`;
+    return f;
+  }
+
+  async function download() {
+    previewEl.textContent = '';
+    downloadHintEl.textContent = '';
+
+    let manifest;
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (!resp.ok) {
+        downloadHintEl.textContent = 'Not available yet (still processing notifications).';
+        return;
+      }
+      manifest = await resp.json();
+    } catch (e) {
+      downloadHintEl.textContent = 'Failed to fetch manifest: ' + e.message;
+      return;
+    }
+
+    const parts = manifest.parts;
+    if (manifest.chunkingStrategy === 'TEXT_LINES_NORMALIZED_LF') {
+      const chunks = [];
+      for (const p of parts) {
+        const r = await fetch(p.downloadUrl);
+        const buf = await r.arrayBuffer();
+        chunks.push(new TextDecoder().decode(buf));
+      }
+      let text = chunks.join('\n');
+      if (manifest.endsWithNewline) text += '\n';
+      previewEl.textContent = text;
+    } else {
+      const bufs = [];
+      let total = 0;
+      for (const p of parts) {
+        const r = await fetch(p.downloadUrl);
+        const buf = await r.arrayBuffer();
+        bufs.push(new Uint8Array(buf));
+        total += buf.byteLength;
+      }
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const b of bufs) {
+        out.set(b, off);
+        off += b.byteLength;
+      }
+      const blob = new Blob([out], { type: manifest.contentType || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = manifest.fileName;
+      a.textContent = 'Download file';
+      downloadHintEl.innerHTML = '';
+      downloadHintEl.appendChild(a);
+      previewEl.textContent = 'Binary file reassembled (' + total + ' bytes).';
+    }
+  }
+
+  fileInput.addEventListener('change', () => {
+    uploadBtn.disabled = !(fileInput.files && fileInput.files.length === 1);
+  });
+
+  uploadBtn.addEventListener('click', async () => {
+    const f = fileInput.files[0];
+    if (!f) return;
+
+    const contentType = f.type || 'application/octet-stream';
+    let chunkPlan;
+    if (isTextType(contentType)) {
+      chunkPlan = await chunkTextNormalizedLf(await f.text());
+    } else {
+      chunkPlan = await chunkBinaryFixed64(await f.arrayBuffer());
+    }
+
+    const partsDto = chunkPlan.parts.map(p => ({ index: p.index, hash: p.hash, lengthBytes: p.lengthBytes }));
+    const partBytesByIndex = new Map(chunkPlan.parts.map(p => [p.index, p.bytes]));
+    const partBytesByHash = new Map(chunkPlan.parts.map(p => [p.hash, p.bytes]));
+
+    const initPayload = {
+      fileId,
+      fileName: f.name,
+      contentType,
+      chunkingStrategy: chunkPlan.chunkingStrategy,
+      textNewlinesNormalized: chunkPlan.textNewlinesNormalized,
+      endsWithNewline: chunkPlan.endsWithNewline,
+      reassembledSizeBytes: chunkPlan.reassembledSizeBytes,
+      parts: partsDto
+    };
+
+    const initResp = await initUpload(initPayload);
+    await uploadMissingChunks(initResp.missingParts, partBytesByIndex);
+    await completeUpload(initResp.fileId, initResp.versionId, partBytesByHash);
+
+    await refreshMeta();
+    alert('Update submitted. Status will flip to AVAILABLE once all chunk events are processed.');
+  });
+
+  document.getElementById('refreshBtn').addEventListener('click', refreshMeta);
+  document.getElementById('downloadBtn').addEventListener('click', download);
+
+  refreshMeta();
+</script>
+</body>
+</html>

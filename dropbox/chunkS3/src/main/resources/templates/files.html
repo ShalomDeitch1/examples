@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Files</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; max-width: 980px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; padding: 0.6rem; text-align: left; }
+    .muted { color: #666; }
+    a { color: #0b57d0; }
+  </style>
+</head>
+<body>
+<h1>Files</h1>
+<p><a href="/">Upload</a></p>
+
+<table>
+  <thead>
+  <tr>
+    <th>Name</th>
+    <th>Type</th>
+    <th>Size (bytes)</th>
+    <th>Status</th>
+  </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<p class="muted" id="empty" style="display:none;">No files yet.</p>
+
+<script>
+  async function load() {
+    const resp = await fetch('/api/files');
+    const files = await resp.json();
+    const tbody = document.getElementById('tbody');
+    const empty = document.getElementById('empty');
+
+    tbody.innerHTML = '';
+    if (!files || files.length === 0) {
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+
+    for (const f of files) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><a href="/files/${f.id}">${f.fileName}</a></td>
+        <td>${f.contentType}</td>
+        <td>${f.sizeBytes}</td>
+        <td>${f.status}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  load();
+  setInterval(load, 2000);
+</script>
+</body>
+</html>
