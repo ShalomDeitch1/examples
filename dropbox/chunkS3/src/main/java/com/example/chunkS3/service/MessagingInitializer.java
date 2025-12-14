@@ -20,6 +20,10 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueAttributesRequest;
 import software.amazon.awssdk.services.sqs.model.SetQueueAttributesRequest;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -36,6 +40,9 @@ public class MessagingInitializer {
     @Value("${aws.s3.bucket}")
     private String bucketName;
 
+    @Value("${aws.s3.endpoint}")
+    private String s3Endpoint;
+
     public MessagingInitializer(SnsClient snsClient, SqsClient sqsClient, S3Client s3Client) {
         this.snsClient = snsClient;
         this.sqsClient = sqsClient;
@@ -45,6 +52,12 @@ public class MessagingInitializer {
     @EventListener(ApplicationReadyEvent.class)
     public void initMessaging() {
         try {
+            // Ensure the S3 bucket exists before creating notifications or subscribing resources.
+            ensureBucketExists();
+
+            // Ensure bucket has permissive CORS for local browser-based PUTs (development only).
+            ensureBucketCors();
+
             String topicArn = createTopicForBucket();
             String queueUrl = createQueueForBucket();
             String queueArn = fetchQueueArn(queueUrl);
@@ -52,7 +65,6 @@ public class MessagingInitializer {
             snsClient.subscribe(SubscribeRequest.builder().topicArn(topicArn).protocol("sqs").endpoint(queueArn).build());
             log.info("Subscribed queue {} to topic {}", queueArn, topicArn);
 
-            ensureBucketExists();
             configureBucketNotifications(topicArn);
             log.info("Configured S3 bucket notifications to SNS topic");
         } catch (Exception e) {
@@ -107,10 +119,26 @@ public class MessagingInitializer {
 
     void ensureBucketExists() {
         try {
+            // Try head first to avoid spurious errors when bucket already exists.
+            s3Client.headBucket(b -> b.bucket(bucketName));
+            log.info("Bucket {} already exists", bucketName);
+            return;
+        } catch (software.amazon.awssdk.services.s3.model.NoSuchBucketException e) {
+            // fall through to create
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            // If 404/NotFound treat as missing, otherwise log and continue to attempt create
+            if (e.statusCode() != 404) {
+                log.warn("HeadBucket failed for {}: {}", bucketName, e.getMessage());
+            }
+        } catch (Exception e) {
+            log.warn("Unexpected error while checking bucket {}: {}", bucketName, e.getMessage());
+        }
+
+        try {
             s3Client.createBucket(b -> b.bucket(bucketName));
             log.info("Created bucket {}", bucketName);
         } catch (Exception e) {
-            log.info("Bucket {} may already exist or could not be created: {}", bucketName, e.getMessage());
+            log.warn("Failed to create bucket {}: {}", bucketName, e.getMessage());
         }
     }
 
@@ -128,5 +156,38 @@ public class MessagingInitializer {
                 .bucket(bucketName)
                 .notificationConfiguration(notif)
                 .build());
+    }
+
+    void ensureBucketCors() {
+        try {
+            // Use a simple HTTP PUT to the LocalStack S3 endpoint to set a permissive CORS XML.
+            // This avoids relying on SDK model types that may vary by version.
+            String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                    "<CORSConfiguration>\n" +
+                    "  <CORSRule>\n" +
+                    "    <AllowedOrigin>*</AllowedOrigin>\n" +
+                    "    <AllowedMethod>GET</AllowedMethod>\n" +
+                    "    <AllowedMethod>PUT</AllowedMethod>\n" +
+                    "    <AllowedMethod>POST</AllowedMethod>\n" +
+                    "    <AllowedMethod>HEAD</AllowedMethod>\n" +
+                    "    <AllowedMethod>DELETE</AllowedMethod>\n" +
+                    "    <AllowedHeader>*</AllowedHeader>\n" +
+                    "    <ExposeHeader>ETag</ExposeHeader>\n" +
+                    "    <MaxAgeSeconds>3000</MaxAgeSeconds>\n" +
+                    "  </CORSRule>\n" +
+                    "</CORSConfiguration>";
+
+            URI putUri = URI.create(s3Endpoint + "/" + bucketName + "?cors");
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest req = HttpRequest.newBuilder(putUri)
+                    .PUT(HttpRequest.BodyPublishers.ofString(xml))
+                    .header("Content-Type", "application/xml")
+                    .build();
+
+            HttpResponse<Void> resp = client.send(req, HttpResponse.BodyHandlers.discarding());
+            log.info("Set bucket CORS on {} => status {}", bucketName, resp.statusCode());
+        } catch (Exception e) {
+            log.warn("Failed to set bucket CORS for {}: {}", bucketName, e.getMessage());
+        }
     }
 }

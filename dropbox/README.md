@@ -90,7 +90,7 @@ flowchart TD
     AppServer -- .2. Save Metadata (Pending). --> DB
     AppServer -- .3. Return Presigned URL. --> Client
     Client -- .4. Upload File. --> S3
-    S3 -. .Async Notification. .-> AppServer
+    S3 -- .Async Notification. --> AppServer
     AppServer -- .5. Update Metadata (Available). --> DB
 ```
 
@@ -212,12 +212,15 @@ For large files and sync efficiency, we split files into chunks. We use fingerpr
 
 ### Design
 
-*   File is split into chunks (e.g., 10 bytes for testing, usually 4MB+).
-*   Client calculates hash of each chunk.
-*   Client asks Server: "Do you have these chunks?"
-*   Server replies with list of missing chunks.
-*   Client uploads only missing chunks.
-*   Metadata stores the "Recipe" (list of chunks) for the file.
+*   Chunking and reassembly are **client-side**.
+*   Client calculates a SHA-256 hash for each chunk.
+*   Server stores **metadata only** (the "Recipe" / manifest: ordered list of (hash, length)).
+*   Chunks are stored in S3 as **content-addressed objects**: `chunks/sha256/<hash>`.
+*   Client calls `POST /api/files/init` with the manifest; server returns presigned PUT URLs for **missing** chunks.
+*   Client uploads only missing chunks directly to S3.
+*   Client calls `POST /api/files/{fileId}/versions/{versionId}/complete` to finalize.
+    - If any expected chunks are still missing, the server returns `409` with presigned URLs for the missing chunk hashes.
+*   Status flow: `PENDING` (new) / `UPDATING` (new version) → `AVAILABLE` when all expected chunk events are observed.
 
 ```mermaid
 flowchart TD
@@ -226,12 +229,13 @@ flowchart TD
     DB[(Database)]
     S3[S3 Storage]
 
-    Client -- .1. Check Chunks (Hashes). --> AppServer
-    AppServer -- .2. Check Existance. --> DB
-    AppServer -- .3. Return Missing Chunks. --> Client
-    Client -- .4. Upload Missing Chunks. --> S3
-    Client -- .5. Finalize (Recipe). --> AppServer
-    AppServer -- .6. Save Recipe. --> DB
+    Client -- .1. Init (manifest). --> AppServer
+    AppServer -- .2. Save metadata (PENDING/UPDATING). --> DB
+    AppServer -- .3. Return missing hashes + presigned PUTs. --> Client
+    Client -- .4. Upload missing chunks. --> S3
+    S3 -- .Async notifications. --> AppServer
+    Client -- .5. Complete version. --> AppServer
+    AppServer -- .6. Mark AVAILABLE when all chunks seen. --> DB
 ```
 
 ```mermaid
@@ -242,18 +246,15 @@ sequenceDiagram
     participant S3
 
     Note over Client, S3: Upload Flow
-    Client->>Client: Split File -> Chunks [A, B, C]
-    Client->>Client: Hash [h(A), h(B), h(C)]
-    
-    Client->>AppServer: POST /check-chunks [h(A), h(B), h(C)]
-    AppServer->>DB: Check Checksums
-    AppServer-->>Client: Missing: [h(B)] (Assume A, C exist)
-    
-    Client->>S3: Upload Chunk B (e.g., via Presigned URL per chunk or batch)
-    
-    Client->>AppServer: POST /finalize-file (FileMetadata, Recipe=[h(A), h(B), h(C)])
-    AppServer->>DB: Save File Metadata & Recipe
-    AppServer-->>Client: 200 OK
+    Client->>Client: Split -> chunks [A, B, C]
+    Client->>Client: Hash -> [h(A), h(B), h(C)]
+    Client->>AppServer: POST /api/files/init (fileName, contentType, parts=[(h, len)])
+    AppServer->>DB: Save file + version (status PENDING/UPDATING)
+    AppServer-->>Client: missingParts + presigned PUT URLs
+    Client->>S3: PUT missing chunks (presigned)
+    S3-->>AppServer: ObjectCreated notifications (via SNS/SQS)
+    Client->>AppServer: POST /api/files/{fileId}/versions/{versionId}/complete
+    AppServer->>DB: Mark AVAILABLE once all expected chunks are present
 ```
 
 ### Solves
@@ -268,6 +269,24 @@ sequenceDiagram
 2.  Server retrieves "Recipe" (list of chunks) from DB.
 3.  Server generates presigned URLs for each chunk (or checks if client already has them in a local cache - Out of Scope for now).
 4.  Client downloads chunks in parallel and reassembles the file.
+
+```mermaid
+flowchart TB
+  subgraph Stage3["Stage 3: Chunking — Download Flow"]
+    Client["Client Device"]
+    AppServer["Application Server"]
+    DB[(Database)]
+    S3["S3 Storage"]
+    Reassemble["Reassemble File (Local)"]
+
+    Client -->|"1. GET /file/{id}"| AppServer
+    AppServer -->|"2. Get Recipe (chunk list)"| DB
+    AppServer -->|"3. Generate Presigned URLs (chunks)"| S3
+    AppServer -->|"4. Return Recipe + URLs"| Client
+    Client -->|"5. Download Chunks (Parallel)"| S3
+    Client -->|"6. Reassemble chunks locally"| Reassemble
+  end
+```
 
 ```mermaid
 sequenceDiagram

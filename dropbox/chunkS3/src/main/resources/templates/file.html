@@ -26,8 +26,19 @@
     <h2>Download / Reassemble</h2>
     <button id="refreshBtn">Refresh status</button>
     <button id="downloadBtn" class="primary">Download (reassembled)</button>
+    <button id="downloadFileBtn">Download as file</button>
     <p class="muted" id="downloadHint"></p>
     <pre id="preview"></pre>
+    <div id="editorArea" style="display:none; margin-top:1rem;">
+      <textarea id="editText" style="width:100%;height:240px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;"></textarea>
+      <div style="margin-top:0.5rem; display:flex; gap:0.5rem;">
+        <button id="saveEditBtn" class="primary">Save as new version</button>
+        <button id="cancelEditBtn">Cancel</button>
+      </div>
+    </div>
+    <div id="remoteChangedNotice" style="display:none;margin-top:0.5rem;color:#a33;">
+      Remote version changed while editing. <button id="reloadEditorBtn">Reload editor</button>
+    </div>
   </div>
 
   <div class="card">
@@ -36,6 +47,12 @@
     <div style="margin-top: 0.75rem;">
       <button id="uploadBtn" class="primary" disabled>Upload new version</button>
     </div>
+    <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
+      <input id="showDiffCb" type="checkbox" checked />
+      <label for="showDiffCb" class="muted">Show chunk-diff before sending</label>
+      <button id="previewDiffBtn" style="margin-left:8px;">Preview chunk diff</button>
+    </div>
+    <div id="diffResult" style="margin-top:0.5rem; font-family:monospace; white-space:pre-wrap; display:none; border:1px dashed #ddd; padding:0.5rem; border-radius:6px; background:#fafafa;"></div>
     <p class="muted">Text updates are line-based; editing line 2 only uploads 1 chunk.</p>
   </div>
 </div>
@@ -49,6 +66,16 @@
 
   const fileInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadBtn');
+  const downloadFileBtn = document.getElementById('downloadFileBtn');
+  const editorArea = document.getElementById('editorArea');
+  const editText = document.getElementById('editText');
+  const saveEditBtn = document.getElementById('saveEditBtn');
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  const remoteChangedNotice = document.getElementById('remoteChangedNotice');
+  const reloadEditorBtn = document.getElementById('reloadEditorBtn');
+  const showDiffCb = document.getElementById('showDiffCb');
+  const previewDiffBtn = document.getElementById('previewDiffBtn');
+  const diffResult = document.getElementById('diffResult');
 
   function toHex(buf) {
     return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
@@ -149,6 +176,23 @@
     }
     titleEl.textContent = f.fileName;
     metaEl.textContent = `id=${f.id} | status=${f.status} | sizeBytes=${f.sizeBytes} | type=${f.contentType}`;
+    window.currentFile = f;
+    // also fetch a lightweight manifest signature and store it for change detection
+    try {
+      const mresp = await fetch(`/api/files/${fileId}/manifest`);
+      if (mresp.ok) {
+        const manifest = await mresp.json();
+        const sig = (manifest.parts || []).map(p => p.hash).join(',');
+        window.currentManifestSignature = sig;
+        window.currentManifest = manifest;
+      } else {
+        window.currentManifestSignature = null;
+        window.currentManifest = null;
+      }
+    } catch (e) {
+      window.currentManifestSignature = null;
+      window.currentManifest = null;
+    }
     return f;
   }
 
@@ -207,6 +251,104 @@
     }
   }
 
+  // Download reassembled file as an actual file (for text and binary)
+  async function downloadAsFile() {
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (!resp.ok) { downloadHintEl.textContent = 'Not available yet.'; return; }
+      const manifest = await resp.json();
+      const parts = manifest.parts;
+      if (manifest.chunkingStrategy === 'TEXT_LINES_NORMALIZED_LF') {
+        const chunks = [];
+        for (const p of parts) {
+          const r = await fetch(p.downloadUrl);
+          const buf = await r.arrayBuffer();
+          chunks.push(new TextDecoder().decode(buf));
+        }
+        let text = chunks.join('\n');
+        if (manifest.endsWithNewline) text += '\n';
+        const blob = new Blob([text], { type: manifest.contentType || 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = manifest.fileName; document.body.appendChild(a); a.click(); a.remove();
+      } else {
+        // binary handled in download() UI path
+        await download();
+      }
+    } catch (e) {
+      downloadHintEl.textContent = 'Failed to download: ' + e.message;
+    }
+  }
+
+  // Edit in-place: show editor populated from reassembled text
+  async function enterEditMode() {
+    previewEl.textContent = '';
+    downloadHintEl.textContent = '';
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (!resp.ok) { downloadHintEl.textContent = 'Not available yet.'; return; }
+      const manifest = await resp.json();
+      if (manifest.chunkingStrategy !== 'TEXT_LINES_NORMALIZED_LF') { downloadHintEl.textContent = 'Not a text file.'; return; }
+      const chunks = [];
+      for (const p of manifest.parts) {
+        const r = await fetch(p.downloadUrl);
+        const buf = await r.arrayBuffer();
+        chunks.push(new TextDecoder().decode(buf));
+      }
+      let text = chunks.join('\n');
+      if (manifest.endsWithNewline) text += '\n';
+      editText.value = text;
+      editorArea.style.display = 'block';
+      // editor opened, mark not dirty until user types
+      window.editDirty = false;
+      remoteChangedNotice.style.display = 'none';
+    } catch (e) {
+      downloadHintEl.textContent = 'Failed to load for editing: ' + e.message;
+    }
+  }
+
+  async function saveEditAsVersion() {
+    try {
+      const text = editText.value || '';
+      // clear any previous diff UI
+      diffResult.style.display = 'none';
+      const chunkPlan = await chunkTextNormalizedLf(text);
+      // if user wants to preview diff, compute and show it, allow cancel
+      if (showDiffCb.checked) {
+        const { same, changed } = await computeChunkDiff(chunkPlan);
+        renderDiffResult(same, changed);
+        if (!confirm(`About to upload ${changed.length} unique changed chunks (of ${chunkPlan.parts.length} parts). Proceed?`)) {
+          return;
+        }
+      }
+      const partsDto = chunkPlan.parts.map(p => ({ index: p.index, hash: p.hash, lengthBytes: p.lengthBytes }));
+      const partBytesByIndex = new Map(chunkPlan.parts.map(p => [p.index, p.bytes]));
+      const partBytesByHash = new Map(chunkPlan.parts.map(p => [p.hash, p.bytes]));
+
+      const current = window.currentFile || await refreshMeta();
+      const initPayload = {
+        fileId,
+        fileName: current.fileName,
+        contentType: current.contentType || 'text/plain',
+        chunkingStrategy: chunkPlan.chunkingStrategy,
+        textNewlinesNormalized: chunkPlan.textNewlinesNormalized,
+        endsWithNewline: chunkPlan.endsWithNewline,
+        reassembledSizeBytes: chunkPlan.reassembledSizeBytes,
+        parts: partsDto
+      };
+
+      const initResp = await initUpload(initPayload);
+      await uploadMissingChunks(initResp.missingParts, partBytesByIndex);
+      await completeUpload(initResp.fileId, initResp.versionId, partBytesByHash);
+
+      editorArea.style.display = 'none';
+      await refreshMeta();
+      downloadHintEl.textContent = 'Update submitted.';
+    } catch (e) {
+      downloadHintEl.textContent = 'Failed to save update: ' + e.message;
+    }
+  }
+
   fileInput.addEventListener('change', () => {
     uploadBtn.disabled = !(fileInput.files && fileInput.files.length === 1);
   });
@@ -238,6 +380,15 @@
       parts: partsDto
     };
 
+    // preview diff if requested
+    if (showDiffCb.checked) {
+      const { same, changed } = await computeChunkDiff(chunkPlan);
+      renderDiffResult(same, changed);
+      if (!confirm(`About to upload ${changed.length} unique changed chunks (of ${chunkPlan.parts.length} parts). Proceed?`)) {
+        return;
+      }
+    }
+
     const initResp = await initUpload(initPayload);
     await uploadMissingChunks(initResp.missingParts, partBytesByIndex);
     await completeUpload(initResp.fileId, initResp.versionId, partBytesByHash);
@@ -246,8 +397,115 @@
     alert('Update submitted. Status will flip to AVAILABLE once all chunk events are processed.');
   });
 
+  // Add Edit button UI
+  const editBtn = document.createElement('button');
+  editBtn.textContent = 'Edit text and upload new version';
+  editBtn.style.marginLeft = '0.5rem';
+  editBtn.addEventListener('click', enterEditMode);
+  document.querySelector('.card h2').appendChild(editBtn);
+
+  saveEditBtn.addEventListener('click', saveEditAsVersion);
+  cancelEditBtn.addEventListener('click', () => { editorArea.style.display = 'none'; });
+  downloadFileBtn.addEventListener('click', downloadAsFile);
+
+  // mark editor dirty when user types
+  editText.addEventListener('input', () => { window.editDirty = true; });
+
+  // Preview diff button (manual)
+  previewDiffBtn.addEventListener('click', async () => {
+    try {
+      let chunkPlan;
+      if (editorArea.style.display === 'block') {
+        chunkPlan = await chunkTextNormalizedLf(editText.value || '');
+      } else {
+        const f = fileInput.files[0];
+        if (!f) { alert('No file selected'); return; }
+        if (isTextType(f.type || '')) chunkPlan = await chunkTextNormalizedLf(await f.text());
+        else chunkPlan = await chunkBinaryFixed64(await f.arrayBuffer());
+      }
+      const { same, changed } = await computeChunkDiff(chunkPlan);
+      renderDiffResult(same, changed);
+    } catch (e) { alert('Failed to compute diff: ' + e.message); }
+  });
+
+  reloadEditorBtn.addEventListener('click', async () => { await enterEditMode(); remoteChangedNotice.style.display = 'none'; });
+
+  // Compute which planned parts match current manifest
+  async function computeChunkDiff(chunkPlan) {
+    let currentHashes = new Set();
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (resp.ok) {
+        const manifest = await resp.json();
+        for (const p of manifest.parts || []) currentHashes.add(p.hash);
+      }
+    } catch (e) {
+      // ignore
+    }
+    const same = [];
+    const changed = [];
+    // unique by hash
+    const seen = new Set();
+    for (const p of chunkPlan.parts) {
+      if (seen.has(p.hash)) continue;
+      seen.add(p.hash);
+      if (currentHashes.has(p.hash)) same.push(p.hash); else changed.push(p.hash);
+    }
+    return { same, changed };
+  }
+
+  function renderDiffResult(same, changed) {
+    diffResult.style.display = 'block';
+    diffResult.innerHTML = `Same: ${same.length}\n${same.slice(0,40).join('\n')}\n\nChanged (will upload): ${changed.length}\n${changed.slice(0,80).join('\n')}`;
+  }
+
+  // Polling: auto-refresh preview/editor when remote changes
+  async function pollForRemoteChanges() {
+    try {
+      // refreshMeta will update window.currentManifestSignature
+      const before = window.currentManifestSignature || null;
+      await refreshMeta();
+      const after = window.currentManifestSignature || null;
+      if (before !== null && after !== null && before !== after) {
+        // remote changed
+        if (editorArea.style.display === 'block') {
+          if (!window.editDirty) {
+            // safe to auto-reload editor content
+            await enterEditMode();
+          } else {
+            // mark notice so user can choose to reload
+            remoteChangedNotice.style.display = 'block';
+          }
+        } else {
+          // not editing: refresh preview automatically
+          await download();
+        }
+      }
+    } catch (e) {
+      // ignore transient errors
+    }
+  }
+
+  // start polling every 3s
+  setInterval(pollForRemoteChanges, 3000);
+
   document.getElementById('refreshBtn').addEventListener('click', refreshMeta);
-  document.getElementById('downloadBtn').addEventListener('click', download);
+  document.getElementById('downloadBtn').addEventListener('click', async () => {
+    // If this is a text file, open the editor with the reassembled content; otherwise perform download preview
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (resp.ok) {
+        const manifest = await resp.json();
+        if (manifest.chunkingStrategy === 'TEXT_LINES_NORMALIZED_LF') {
+          await enterEditMode();
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore and fallback to download
+    }
+    await download();
+  });
 
   refreshMeta();
 </script>

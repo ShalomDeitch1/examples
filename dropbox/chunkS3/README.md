@@ -42,17 +42,24 @@ Statuses:
     - When `AVAILABLE`, returns ordered parts + presigned GET URLs so the client can download and reassemble.
 
 ## Upload flow
-
 ```mermaid
 flowchart TD
-    Client[Client] -->|1. Hash + build manifest| Client
-    Client -->|2. POST /api/files/init| App[App Server]
-    App -->|3. HEAD S3 for each hash| S3[(S3)]
-    App -->|4. Save version + session| DB[(DB)]
+    Client[Client Device]
+    Compute[Hash & build manifest]
+    App[App Server]
+    DB[(DB)]
+    S3[(S3)]
+    SNS[SNS]
+    SQS[SQS]
+
+    Client --> Compute
+    Compute -->|2. POST /api/files/init| App
+    App -->|3. HEAD S3 for each hash| S3
+    App -->|4. Save version + session| DB
     App -->|5. missingParts + presigned PUTs| Client
     Client -->|6. PUT missing chunks| S3
-    S3 -->|7. ObjectCreated event| SNS[SNS]
-    SNS --> SQS[SQS]
+    S3 -->|7. ObjectCreated event| SNS
+    SNS --> SQS
     SQS -->|8. Mark received + maybe finalize| App
     Client -->|9. POST /complete| App
 ```
@@ -61,7 +68,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Client[Client] -->|1. GET /api/files/{id}/manifest| App[App Server]
+    Client[Client] -->|1". GET /api/files/{id}/manifest"| App[App Server]
     App -->|2. Presign GET per chunk| S3[(S3)]
     App -->|3. Manifest + URLs| Client
     Client -->|4. GET chunks (parallel)| S3
@@ -100,3 +107,38 @@ mvn spring-boot:run
 - Encryption: envelope encryption per user/device, with chunk-level encryption keys.
 - Garbage collection: reference counting or mark-and-sweep for unreferenced chunks.
 - Cost controls: cache existence checks (HEAD), batch HEAD via inventory, or maintain a chunk index for hot objects.
+
+## CORS and Presigned URLs (Local vs Production)
+
+Why you saw CORS errors
+
+- Browsers enforce the Same-Origin Policy. Your app is served from http://localhost:8080, while presigned PUTs go to the S3 endpoint (http://localhost:4566). Browsers treat different ports as different origins, so before allowing the PUT the browser checks the S3 bucket's CORS policy. If the bucket does not allow your origin/method/headers, the browser blocks the request (you will see a CORS error in DevTools). Server-side uploads (curl, server processes) are not blocked by browser CORS.
+
+Local development fix
+
+- For convenience the app automatically sets a permissive CORS policy on startup when running locally (AllowedOrigins="*"). This makes browser PUT tests work without manual bucket setup. This is safe only for local development and testing with LocalStack.
+
+Production recommendations
+
+- Do NOT use a wildcard CORS policy in production. Instead:
+    - Restrict `AllowedOrigins` to your app's canonical origin(s) (for example, https://app.example.com).
+    - Only allow the minimal methods you need (usually `PUT`, `GET`, `HEAD`, and `POST` if you use form uploads).
+    - Keep `AllowedHeaders` narrowly scoped (e.g. `Content-Type`, `x-amz-acl` if used) and `ExposeHeaders` to the small set you require (e.g. `ETag`).
+
+- Use short-lived presigned URLs: keep TTL small (the app default is 10 minutes). Shorter TTLs reduce risk if a URL leaks.
+
+- Constrain object keys and upload prefixes server-side: generate presigned URLs only for well-formed keys (e.g., under a per-user prefix or content-addressed path `chunks/sha256/...`). This prevents arbitrary writes into your bucket.
+
+- Prefer signed POST forms when you need richer server-side constraints in the browser upload flow (POST policies can include conditions on content-length, key prefix, content-type).
+
+- Consider using a CDN or reverse-proxy (CloudFront, ALB) in front of S3 and issue signed URLs/cookies via the CDN. With CloudFront you can apply origin policies and avoid exposing S3 directly to arbitrary origins.
+
+- As an alternative to exposing S3 directly to browsers, proxy the upload through your application server for sensitive uploads (server acts as an authenticated gateway). This reintroduces server bandwidth cost but can simplify security.
+
+Server-side verification
+
+- Always verify uploaded content/manifest server-side before marking a version AVAILABLE: check sizes, expected chunk hashes (HEAD/GET), and that all parts are present. Use short TTLs and re-check at `/complete` time to avoid relying solely on client behavior.
+
+Summary
+
+- For local testing it's acceptable to relax CORS; for production lock CORS to known origins and use presigned URLs or signed POST forms with tight constraints, short TTLs, and server-side verification.
