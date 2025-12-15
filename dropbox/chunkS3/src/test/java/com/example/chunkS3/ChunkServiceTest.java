@@ -105,14 +105,20 @@ class ChunkServiceTest {
             v1Parts.parts()
         ));
 
-        assertThat(init1.missingParts()).hasSize(3);
+        // Expect one missing part per unique chunk hash
+        assertThat(init1.expectedUniqueChunks()).isEqualTo(3);
+        assertThat(init1.missingParts()).hasSize(init1.expectedUniqueChunks());
 
         // Upload v1 chunks (direct put; still triggers S3 notifications).
         for (var c : v1Parts.chunks()) {
             String key = "chunks/sha256/" + c.hash();
             s3Client.putObject(b -> b.bucket("dropbox-stage3-test").key(key), RequestBody.fromBytes(c.bytes()));
         }
-        chunkedFileService.completeUpload(init1.fileId(), init1.versionId());
+        try {
+            chunkedFileService.completeUpload(init1.fileId(), init1.versionId());
+        } catch (ChunkedFileService.MissingChunksException e) {
+            throw new AssertionError("Unexpected missing chunks on first complete: " + e.getResponse().missingChunks(), e);
+        }
 
         awaitAvailable(init1.fileId(), Duration.ofSeconds(15));
         long objectsAfterV1 = countChunkObjects();
@@ -131,7 +137,8 @@ class ChunkServiceTest {
             v2Parts.parts()
         ));
 
-        assertThat(init2.missingParts()).hasSize(1);
+        assertThat(init2.expectedUniqueChunks()).isEqualTo(1);
+        assertThat(init2.missingParts()).hasSize(init2.expectedUniqueChunks());
         assertThat(init2.status()).isEqualTo(FileStatus.UPDATING);
 
         // Upload only the missing chunk (second line).
@@ -139,7 +146,11 @@ class ChunkServiceTest {
         var bytes = v2Parts.chunks().get(missing.index()).bytes();
         s3Client.putObject(b -> b.bucket("dropbox-stage3-test").key("chunks/sha256/" + missing.hash()), RequestBody.fromBytes(bytes));
 
-        chunkedFileService.completeUpload(init2.fileId(), init2.versionId());
+        try {
+            chunkedFileService.completeUpload(init2.fileId(), init2.versionId());
+        } catch (ChunkedFileService.MissingChunksException e) {
+            throw new AssertionError("Unexpected missing chunks on second complete: " + e.getResponse().missingChunks(), e);
+        }
         awaitAvailable(init2.fileId(), Duration.ofSeconds(15));
 
         long objectsAfterV2 = countChunkObjects();
@@ -155,11 +166,14 @@ class ChunkServiceTest {
 
     private long countChunkObjects() {
         return s3Client.listObjectsV2(ListObjectsV2Request.builder()
-                        .bucket("dropbox-stage3-test")
-                        .prefix("chunks/sha256/")
-                        .build())
-                .contents()
-                .size();
+                .bucket("dropbox-stage3-test")
+                .prefix("chunks/sha256/")
+                .build())
+            .contents()
+            .stream()
+            .map(o -> o.key())
+            .distinct()
+            .count();
     }
 
     private void awaitAvailable(UUID fileId, Duration timeout) throws InterruptedException {
