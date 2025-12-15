@@ -206,6 +206,45 @@ class ChunkServiceTest {
         assertThat(reassembled).isEqualTo(text.replace("\r\n", "\n"));
     }
 
+    @Test
+    void rollingChunking_singleCharEdit_changesOnlyFewChunksComparedToLineBased() throws Exception {
+        // Intentionally no newlines: line-based strategy produces a single chunk,
+        // so any change forces re-upload of the entire content.
+        String base = ("alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa "
+                + "0123456789abcdef ").repeat(400);
+
+        // Single-character replacement (not insertion) to avoid index shifting.
+        int editAt = base.length() / 2;
+        String edited = base.substring(0, editAt) + 'X' + base.substring(editAt + 1);
+
+        var lineV1 = textLineParts(base);
+        var lineV2 = textLineParts(edited);
+        assertThat(lineV1.parts()).hasSize(1);
+        assertThat(lineV2.parts()).hasSize(1);
+        assertThat(lineV1.parts().getFirst().hash()).isNotEqualTo(lineV2.parts().getFirst().hash());
+
+        var rollV1 = rollingTextParts(base);
+        var rollV2 = rollingTextParts(edited);
+        assertThat(rollV1.parts().size()).isGreaterThan(10);
+        assertThat(rollV2.parts().size()).isGreaterThan(10);
+
+        // Rolling chunking should preserve most chunk boundaries and therefore most part hashes
+        // at the same indices for a single-character replacement.
+        int minParts = Math.min(rollV1.parts().size(), rollV2.parts().size());
+        int unchangedByIndex = 0;
+        for (int i = 0; i < minParts; i++) {
+            var p1 = rollV1.parts().get(i);
+            var p2 = rollV2.parts().get(i);
+            if (p1.hash().equals(p2.hash()) && p1.lengthBytes() == p2.lengthBytes()) {
+                unchangedByIndex++;
+            }
+        }
+
+        assertThat(unchangedByIndex)
+                .as("Most rolling chunks should remain identical across a single-character change")
+                .isGreaterThanOrEqualTo(minParts - 3);
+    }
+
     private long countChunkObjects() {
         return s3Client.listObjectsV2(ListObjectsV2Request.builder()
                 .bucket("dropbox-stage4-test")
