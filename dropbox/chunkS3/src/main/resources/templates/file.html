@@ -109,16 +109,18 @@
     return { parts, endsWithNewline, reassembledSizeBytes: reassembledSize, chunkingStrategy: 'TEXT_LINES_NORMALIZED_LF', textNewlinesNormalized: true };
   }
 
-  async function chunkBinaryFixed64(arrayBuffer) {
+  const BINARY_CHUNK_SIZE = 256 * 1024;
+
+  async function chunkBinaryFixed256KiB(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
     const parts = [];
     let idx = 0;
-    for (let offset = 0; offset < bytes.length; offset += 64) {
-      const slice = bytes.slice(offset, Math.min(offset + 64, bytes.length));
+    for (let offset = 0; offset < bytes.length; offset += BINARY_CHUNK_SIZE) {
+      const slice = bytes.slice(offset, Math.min(offset + BINARY_CHUNK_SIZE, bytes.length));
       const hash = await sha256Hex(slice);
       parts.push({ index: idx++, hash, lengthBytes: slice.byteLength, bytes: slice });
     }
-    return { parts, endsWithNewline: false, reassembledSizeBytes: bytes.byteLength, chunkingStrategy: 'FIXED_64_BYTES', textNewlinesNormalized: false };
+    return { parts, endsWithNewline: false, reassembledSizeBytes: bytes.byteLength, chunkingStrategy: 'FIXED_256_KIB', textNewlinesNormalized: false };
   }
 
   async function fetchFiles() {
@@ -362,7 +364,7 @@
     if (isTextType(contentType)) {
       chunkPlan = await chunkTextNormalizedLf(await f.text());
     } else {
-      chunkPlan = await chunkBinaryFixed64(await f.arrayBuffer());
+      chunkPlan = await chunkBinaryFixed256KiB(await f.arrayBuffer());
     }
 
     const partsDto = chunkPlan.parts.map(p => ({ index: p.index, hash: p.hash, lengthBytes: p.lengthBytes }));
@@ -421,7 +423,7 @@
         const f = fileInput.files[0];
         if (!f) { alert('No file selected'); return; }
         if (isTextType(f.type || '')) chunkPlan = await chunkTextNormalizedLf(await f.text());
-        else chunkPlan = await chunkBinaryFixed64(await f.arrayBuffer());
+        else chunkPlan = await chunkBinaryFixed256KiB(await f.arrayBuffer());
       }
       const { same, changed } = await computeChunkDiff(chunkPlan);
       renderDiffResult(same, changed);

@@ -1,32 +1,5 @@
 package com.example.chunkS3.service;
 
-import com.example.chunkS3.model.ChunkPart;
-import com.example.chunkS3.model.ChunkingStrategy;
-import com.example.chunkS3.model.FileMetadata;
-import com.example.chunkS3.model.FileStatus;
-import com.example.chunkS3.model.FileVersion;
-import com.example.chunkS3.model.UploadSession;
-import com.example.chunkS3.repository.FileMetadataRepository;
-import com.example.chunkS3.repository.FileVersionRepository;
-import com.example.chunkS3.repository.UploadSessionRepository;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
-import software.amazon.awssdk.services.s3.model.S3Exception;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
-import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -37,11 +10,36 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.example.chunkS3.model.ChunkPart;
+import com.example.chunkS3.model.ChunkingStrategy;
+import com.example.chunkS3.model.FileMetadata;
+import com.example.chunkS3.model.FileStatus;
+import com.example.chunkS3.model.FileVersion;
+import com.example.chunkS3.model.UploadSession;
+import com.example.chunkS3.repository.FileMetadataRepository;
+import com.example.chunkS3.repository.FileVersionRepository;
+import com.example.chunkS3.repository.UploadSessionRepository;
+
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 @Service
 public class ChunkedFileService {
