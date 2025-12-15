@@ -68,10 +68,10 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Client[Client] -->|1". GET /api/files/{id}/manifest"| App[App Server]
+    Client[Client] -->|"1. GET /api/files/{id}/manifest"| App[App Server]
     App -->|2. Presign GET per chunk| S3[(S3)]
     App -->|3. Manifest + URLs| Client
-    Client -->|4. GET chunks (parallel)| S3
+    Client -->|"4. GET chunks (parallel)"| S3
     Client -->|5. Reassemble locally| Client
 ```
 

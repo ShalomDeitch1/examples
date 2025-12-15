@@ -111,7 +111,8 @@ public class ChunkedFileService {
                 initialStatus);
         version = versionRepository.save(version);
 
-        UploadSession session = UploadSession.create(file.getId(), version, initialStatus, uniqueHashCount(req.parts()));
+        // Expected part count should reflect unique chunk hashes that are not already present in S3
+        UploadSession session = UploadSession.create(file.getId(), version, initialStatus, countMissingUnique(req.parts()));
         session = sessionRepository.save(session);
 
         Map<String, String> presignedPutByHash = new HashMap<>();
@@ -322,6 +323,18 @@ public class ChunkedFileService {
             hashes.add(p.hash());
         }
         return hashes.size();
+    }
+
+    private int countMissingUnique(List<InitPart> parts) {
+        Set<String> hashes = new HashSet<>();
+        int missing = 0;
+        for (InitPart p : parts) {
+            String h = p.hash();
+            if (hashes.add(h)) {
+                if (!existsInS3(h)) missing++;
+            }
+        }
+        return missing;
     }
 
     private static String urlDecodeKey(String key) {
