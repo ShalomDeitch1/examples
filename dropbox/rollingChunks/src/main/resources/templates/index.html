@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Stage 4 — Rolling/CDC Chunked Upload (Client-side)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; max-width: 980px; }
+    code { background: #f3f3f3; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 1rem; flex: 1; min-width: 320px; }
+    textarea { width: 100%; height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    button { padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    button.primary { background: #111; color: #fff; border-color: #111; }
+    .muted { color: #666; }
+    .log { white-space: pre-wrap; background: #0b1020; color: #e7e7e7; padding: 0.8rem; border-radius: 10px; min-height: 120px; }
+  </style>
+</head>
+<body>
+<h1>Stage 4 — Rolling/CDC Chunked Upload (Client-side)</h1>
+<p class="muted">
+  Text files are normalized to LF and chunked with a <b>rolling/content-defined chunker</b> (CDC).
+  Other files are chunked into <b>256 KiB</b> pieces.
+  The browser uploads missing chunks directly to S3 using presigned URLs.
+</p>
+
+<p><a href="/files">View files</a></p>
+
+<div class="row">
+  <div class="card">
+    <h2>Upload a file</h2>
+    <input id="fileInput" type="file"/>
+    <div style="margin-top: 0.75rem;">
+      <button id="uploadBtn" class="primary" disabled>Upload (chunked)</button>
+    </div>
+    <p class="muted" style="margin-top: 0.75rem;">Or paste text below (treated as <code>text/plain</code>).</p>
+    <textarea id="textInput" placeholder="Paste some text with multiple lines..."></textarea>
+    <div style="margin-top: 0.75rem;">
+      <button id="uploadTextBtn">Upload pasted text</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Progress</h2>
+    <div id="log" class="log"></div>
+  </div>
+</div>
+
+<script>
+  const logEl = document.getElementById('log');
+  const fileInput = document.getElementById('fileInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const textInput = document.getElementById('textInput');
+  const uploadTextBtn = document.getElementById('uploadTextBtn');
+
+  function log(msg) {
+    logEl.textContent += msg + "\n";
+  }
+
+  function toHex(buf) {
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function sha256Hex(bytes) {
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return toHex(digest);
+  }
+
+  function isTextType(contentType) {
+    return contentType && contentType.startsWith('text/');
+  }
+
+  // Rolling/content-defined chunking parameters.
+  // In LocalStack we intentionally keep these tiny so you can observe the upload behavior.
+  // If you implement chunk boundaries as S3 multipart-upload PART sizes in real AWS, the allowed range is:
+  //   min 5 MiB (except last), max 5 GiB, and max 10,000 parts per object.
+  const TEXT_ROLLING_MIN_BYTES = 64;
+  const TEXT_ROLLING_AVG_BYTES = 256; // power-of-two preferred for mask-based cut below
+  const TEXT_ROLLING_MAX_BYTES = 1024;
+
+  // A small "gear" table for a fast rolling hash. (Deterministic constants.)
+  const GEAR = (() => {
+    const x = [
+      0x1f123bb5,0x9e3779b9,0x7f4a7c15,0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,
+      0x9b05688c,0x1d83d9ab,0x5be0cd19,0x243f6a88,0x85a308d3,0x13198a2e,0x03707344,0xa4093822,
+      0x299f31d0,0x082efa98,0xec4e6c89,0x452821e6,0x38d01377,0xbe5466cf,0x34e90c6c,0xc0ac29b7,
+      0xc97c50dd,0x3f84d5b5,0xb5470917,0x9216d5d9,0x8979fb1b,0xd1310ba6,0x98dfb5ac,0x2ffd72db,
+      0xd01adfb7,0xb8e1afed,0x6a267e96,0xba7c9045,0xf12c7f99,0x24a19947,0xb3916cf7,0x0801f2e2,
+      0x858efc16,0x636920d8,0x71574e69,0xa458fea3,0xf4933d7e,0x0d95748f,0x728eb658,0x718bcd58,
+      0x82154aee,0x7b54a41d,0xc25a59b5,0x9c30d539,0x2af26013,0xc5d1b023,0x286085f0,0xca417918,
+      0xb8db38ef,0x8e79dcb0,0x603a180e,0x6c9e0e8b,0xb01e8a3e,0xd71577c1,0xbd314b27,0x78af2fda,
+    ];
+    const out = new Uint32Array(256);
+    let v = 0x9e3779b9;
+    for (let i = 0; i < 256; i++) {
+      v = (v + 0x7f4a7c15) >>> 0;
+      const base = x[i % x.length];
+      out[i] = (base ^ ((v << 13) | (v >>> 19))) >>> 0;
+    }
+    return out;
+  })();
+
+  function nextPow2(n) {
+    let p = 1;
+    while (p < n) p <<= 1;
+    return p;
+  }
+
+  function rollingChunkBoundaries(bytes, minBytes, avgBytes, maxBytes) {
+    const avgPow2 = nextPow2(avgBytes);
+    const mask = avgPow2 - 1;
+
+    const cuts = [0];
+    let h = 0 >>> 0;
+    let lastCut = 0;
+
+    for (let i = 0; i < bytes.length; i++) {
+      h = ((h << 1) + GEAR[bytes[i]]) >>> 0;
+      const size = i + 1 - lastCut;
+      if (size < minBytes) continue;
+      if (size >= maxBytes || (h & mask) === 0) {
+        cuts.push(i + 1);
+        lastCut = i + 1;
+        h = 0;
+      }
+    }
+
+    if (cuts[cuts.length - 1] !== bytes.length) cuts.push(bytes.length);
+    return cuts;
+  }
+
+  async function chunkTextRollingNormalizedLf(text) {
+    const normalized = text.replace(/\r\n/g, '\n');
+    const endsWithNewline = normalized.endsWith('\n');
+    const enc = new TextEncoder();
+    const bytes = enc.encode(normalized);
+
+    const cuts = rollingChunkBoundaries(bytes, TEXT_ROLLING_MIN_BYTES, TEXT_ROLLING_AVG_BYTES, TEXT_ROLLING_MAX_BYTES);
+    const parts = [];
+    let idx = 0;
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const start = cuts[i];
+      const end = cuts[i + 1];
+      const slice = bytes.slice(start, end);
+      const hash = await sha256Hex(slice);
+      parts.push({ index: idx++, hash, lengthBytes: slice.byteLength, bytes: slice });
+    }
+
+    return {
+      parts,
+      endsWithNewline,
+      reassembledSizeBytes: bytes.byteLength,
+      chunkingStrategy: 'ROLLING_TEXT_NORMALIZED_LF',
+      textNewlinesNormalized: true
+    };
+  }
+
+  const BINARY_CHUNK_SIZE = 256 * 1024;
+
+  async function chunkBinaryFixed256KiB(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    const parts = [];
+    let idx = 0;
+    for (let offset = 0; offset < bytes.length; offset += BINARY_CHUNK_SIZE) {
+      const slice = bytes.slice(offset, Math.min(offset + BINARY_CHUNK_SIZE, bytes.length));
+      const hash = await sha256Hex(slice);
+      parts.push({ index: idx++, hash, lengthBytes: slice.byteLength, bytes: slice });
+    }
+    return { parts, endsWithNewline: false, reassembledSizeBytes: bytes.byteLength, chunkingStrategy: 'FIXED_256_KIB', textNewlinesNormalized: false };
+  }
+
+  async function initUpload(payload) {
+    const resp = await fetch('/api/files/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`init failed: ${resp.status} ${txt}`);
+    }
+    return resp.json();
+  }
+
+  async function completeUpload(fileId, versionId, partBytesByHash) {
+    const resp = await fetch(`/api/files/${fileId}/versions/${versionId}/complete`, { method: 'POST' });
+    if (resp.status === 409) {
+      const body = await resp.json();
+      if (body && Array.isArray(body.missingChunks) && body.missingChunks.length > 0) {
+        log(`Server reports ${body.missingChunks.length} missing unique chunks; re-uploading...`);
+        await uploadMissingChunksByHash(body.missingChunks, partBytesByHash);
+        return completeUpload(fileId, versionId, partBytesByHash);
+      }
+    }
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`complete failed: ${resp.status} ${txt}`);
+    }
+  }
+
+  async function uploadMissingChunks(missingParts, partBytesByIndex) {
+    for (const mp of missingParts) {
+      const bytes = partBytesByIndex.get(mp.index);
+      if (!bytes) throw new Error('missing bytes for index ' + mp.index);
+      const putResp = await fetch(mp.uploadUrl, { method: 'PUT', body: bytes });
+      if (!putResp.ok) {
+        throw new Error(`PUT failed for chunk index=${mp.index} status=${putResp.status}`);
+      }
+    }
+  }
+
+  async function uploadMissingChunksByHash(missingChunks, partBytesByHash) {
+    for (const mc of missingChunks) {
+      const bytes = partBytesByHash.get(mc.hash);
+      if (!bytes) throw new Error('missing bytes for hash ' + mc.hash);
+      const putResp = await fetch(mc.uploadUrl, { method: 'PUT', body: bytes });
+      if (!putResp.ok) {
+        throw new Error(`PUT failed for chunk hash=${mc.hash} status=${putResp.status}`);
+      }
+    }
+  }
+
+  async function doUpload({ fileName, contentType, chunkPlan }) {
+    logEl.textContent = '';
+    log(`Preparing chunks for ${fileName} (${contentType}) ...`);
+
+    const partsDto = chunkPlan.parts.map(p => ({ index: p.index, hash: p.hash, lengthBytes: p.lengthBytes }));
+    const partBytesByIndex = new Map(chunkPlan.parts.map(p => [p.index, p.bytes]));
+    const partBytesByHash = new Map(chunkPlan.parts.map(p => [p.hash, p.bytes]));
+
+    const initPayload = {
+      fileId: null,
+      fileName,
+      contentType,
+      chunkingStrategy: chunkPlan.chunkingStrategy,
+      textNewlinesNormalized: chunkPlan.textNewlinesNormalized,
+      endsWithNewline: chunkPlan.endsWithNewline,
+      reassembledSizeBytes: chunkPlan.reassembledSizeBytes,
+      parts: partsDto
+    };
+
+    const initResp = await initUpload(initPayload);
+    log(`Server created fileId=${initResp.fileId} versionId=${initResp.versionId}`);
+    log(`Unique chunks received already: ${initResp.receivedUniqueChunks}/${initResp.expectedUniqueChunks}`);
+    log(`Missing parts to upload: ${initResp.missingParts.length}`);
+
+    if (initResp.missingParts.length > 0) {
+      log('Uploading missing chunks directly to S3...');
+      await uploadMissingChunks(initResp.missingParts, partBytesByIndex);
+      log('Chunk uploads finished.');
+    } else {
+      log('No uploads needed (full dedup).');
+    }
+
+    await completeUpload(initResp.fileId, initResp.versionId, partBytesByHash);
+    log('Finalize complete. Status will become AVAILABLE once notifications process.');
+
+    window.location.href = `/files/${initResp.fileId}`;
+  }
+
+  fileInput.addEventListener('change', () => {
+    uploadBtn.disabled = !(fileInput.files && fileInput.files.length === 1);
+  });
+
+  uploadBtn.addEventListener('click', async () => {
+    const f = fileInput.files[0];
+    if (!f) return;
+    const contentType = f.type || 'application/octet-stream';
+
+    try {
+      let chunkPlan;
+      if (isTextType(contentType)) {
+        const text = await f.text();
+        chunkPlan = await chunkTextRollingNormalizedLf(text);
+      } else {
+        const buf = await f.arrayBuffer();
+        chunkPlan = await chunkBinaryFixed256KiB(buf);
+      }
+      await doUpload({ fileName: f.name, contentType, chunkPlan });
+    } catch (e) {
+      log('ERROR: ' + e.message);
+      console.error(e);
+    }
+  });
+
+  uploadTextBtn.addEventListener('click', async () => {
+    const text = textInput.value || '';
+    try {
+      const chunkPlan = await chunkTextRollingNormalizedLf(text);
+      await doUpload({ fileName: 'pasted.txt', contentType: 'text/plain', chunkPlan });
+    } catch (e) {
+      log('ERROR: ' + e.message);
+      console.error(e);
+    }
+  });
+
+  log('Select a file or paste text to begin.');
+</script>
+</body>
+</html>

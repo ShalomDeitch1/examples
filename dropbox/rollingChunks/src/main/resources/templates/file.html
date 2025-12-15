@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>File</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; max-width: 980px; }
+    code { background: #f3f3f3; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .muted { color: #666; }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 1rem; flex: 1; min-width: 320px; }
+    pre { white-space: pre-wrap; background: #0b1020; color: #e7e7e7; padding: 0.8rem; border-radius: 10px; }
+    button { padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    button.primary { background: #111; color: #fff; border-color: #111; }
+  </style>
+</head>
+<body>
+<p><a href="/files">Back to files</a> | <a href="/">Upload</a></p>
+
+<h1 id="title">File</h1>
+<p class="muted" id="meta"></p>
+
+<div class="row">
+  <div class="card">
+    <h2>Download / Reassemble</h2>
+    <button id="refreshBtn">Refresh status</button>
+    <button id="downloadBtn" class="primary">Download (reassembled)</button>
+    <button id="downloadFileBtn">Download as file</button>
+    <p class="muted" id="downloadHint"></p>
+    <pre id="preview"></pre>
+    <div id="editorArea" style="display:none; margin-top:1rem;">
+      <textarea id="editText" style="width:100%;height:240px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;"></textarea>
+      <div style="margin-top:0.5rem; display:flex; gap:0.5rem;">
+        <button id="saveEditBtn" class="primary">Save as new version</button>
+        <button id="cancelEditBtn">Cancel</button>
+      </div>
+    </div>
+    <div id="remoteChangedNotice" style="display:none;margin-top:0.5rem;color:#a33;">
+      Remote version changed while editing. <button id="reloadEditorBtn">Reload editor</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Update this file</h2>
+    <input id="fileInput" type="file"/>
+    <div style="margin-top: 0.75rem;">
+      <button id="uploadBtn" class="primary" disabled>Upload new version</button>
+    </div>
+    <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
+      <input id="showDiffCb" type="checkbox" checked />
+      <label for="showDiffCb" class="muted">Show chunk-diff before sending</label>
+      <button id="previewDiffBtn" style="margin-left:8px;">Preview chunk diff</button>
+    </div>
+    <div id="diffResult" style="margin-top:0.5rem; font-family:monospace; white-space:pre-wrap; display:none; border:1px dashed #ddd; padding:0.5rem; border-radius:6px; background:#fafafa;"></div>
+    <p class="muted">Text updates use rolling/content-defined chunking (CDC); small edits usually re-upload only a few chunks.</p>
+  </div>
+</div>
+
+<script>
+  const fileId = window.location.pathname.split('/').pop();
+  const titleEl = document.getElementById('title');
+  const metaEl = document.getElementById('meta');
+  const previewEl = document.getElementById('preview');
+  const downloadHintEl = document.getElementById('downloadHint');
+
+  const fileInput = document.getElementById('fileInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const downloadFileBtn = document.getElementById('downloadFileBtn');
+  const editorArea = document.getElementById('editorArea');
+  const editText = document.getElementById('editText');
+  const saveEditBtn = document.getElementById('saveEditBtn');
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  const remoteChangedNotice = document.getElementById('remoteChangedNotice');
+  const reloadEditorBtn = document.getElementById('reloadEditorBtn');
+  const showDiffCb = document.getElementById('showDiffCb');
+  const previewDiffBtn = document.getElementById('previewDiffBtn');
+  const diffResult = document.getElementById('diffResult');
+
+  function toHex(buf) {
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function sha256Hex(bytes) {
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return toHex(digest);
+  }
+
+  function isTextType(contentType) {
+    return contentType && contentType.startsWith('text/');
+  }
+
+  // Rolling/content-defined chunking parameters.
+  // In LocalStack we intentionally keep these tiny so you can observe the upload behavior.
+  // If you implement chunk boundaries as S3 multipart-upload PART sizes in real AWS, the allowed range is:
+  //   min 5 MiB (except last), max 5 GiB, and max 10,000 parts per object.
+  const TEXT_ROLLING_MIN_BYTES = 64;
+  const TEXT_ROLLING_AVG_BYTES = 256; // must be a power-of-two for the simple cut-mask below
+  const TEXT_ROLLING_MAX_BYTES = 1024;
+
+  // A small "gear" table for a fast rolling hash. (Deterministic constants.)
+  const GEAR = (() => {
+    // 256 32-bit constants (split across lines to keep file readable)
+    const x = [
+      0x1f123bb5,0x9e3779b9,0x7f4a7c15,0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,
+      0x9b05688c,0x1d83d9ab,0x5be0cd19,0x243f6a88,0x85a308d3,0x13198a2e,0x03707344,0xa4093822,
+      0x299f31d0,0x082efa98,0xec4e6c89,0x452821e6,0x38d01377,0xbe5466cf,0x34e90c6c,0xc0ac29b7,
+      0xc97c50dd,0x3f84d5b5,0xb5470917,0x9216d5d9,0x8979fb1b,0xd1310ba6,0x98dfb5ac,0x2ffd72db,
+      0xd01adfb7,0xb8e1afed,0x6a267e96,0xba7c9045,0xf12c7f99,0x24a19947,0xb3916cf7,0x0801f2e2,
+      0x858efc16,0x636920d8,0x71574e69,0xa458fea3,0xf4933d7e,0x0d95748f,0x728eb658,0x718bcd58,
+      0x82154aee,0x7b54a41d,0xc25a59b5,0x9c30d539,0x2af26013,0xc5d1b023,0x286085f0,0xca417918,
+      0xb8db38ef,0x8e79dcb0,0x603a180e,0x6c9e0e8b,0xb01e8a3e,0xd71577c1,0xbd314b27,0x78af2fda,
+    ];
+    // Expand deterministically to 256 values by mixing.
+    const out = new Uint32Array(256);
+    let v = 0x9e3779b9;
+    for (let i = 0; i < 256; i++) {
+      v = (v + 0x7f4a7c15) >>> 0;
+      const base = x[i % x.length];
+      out[i] = (base ^ ((v << 13) | (v >>> 19))) >>> 0;
+    }
+    return out;
+  })();
+
+  function nextPow2(n) {
+    let p = 1;
+    while (p < n) p <<= 1;
+    return p;
+  }
+
+  function rollingChunkBoundaries(bytes, minBytes, avgBytes, maxBytes) {
+    const avgPow2 = nextPow2(avgBytes);
+    const mask = avgPow2 - 1;
+
+    const cuts = [0];
+    let h = 0 >>> 0;
+    let lastCut = 0;
+
+    for (let i = 0; i < bytes.length; i++) {
+      // gear hash: cheap rolling hash
+      h = ((h << 1) + GEAR[bytes[i]]) >>> 0;
+      const size = i + 1 - lastCut;
+
+      if (size < minBytes) continue;
+      if (size >= maxBytes || (h & mask) === 0) {
+        cuts.push(i + 1);
+        lastCut = i + 1;
+        h = 0;
+      }
+    }
+
+    if (cuts[cuts.length - 1] !== bytes.length) cuts.push(bytes.length);
+    return cuts;
+  }
+
+  async function chunkTextRollingNormalizedLf(text) {
+    const normalized = text.replace(/\r\n/g, '\n');
+    const endsWithNewline = normalized.endsWith('\n');
+    const enc = new TextEncoder();
+    const bytes = enc.encode(normalized);
+
+    const cuts = rollingChunkBoundaries(bytes, TEXT_ROLLING_MIN_BYTES, TEXT_ROLLING_AVG_BYTES, TEXT_ROLLING_MAX_BYTES);
+    const parts = [];
+    let idx = 0;
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const start = cuts[i];
+      const end = cuts[i + 1];
+      const slice = bytes.slice(start, end);
+      const hash = await sha256Hex(slice);
+      parts.push({ index: idx++, hash, lengthBytes: slice.byteLength, bytes: slice });
+    }
+
+    return {
+      parts,
+      endsWithNewline,
+      reassembledSizeBytes: bytes.byteLength,
+      chunkingStrategy: 'ROLLING_TEXT_NORMALIZED_LF',
+      textNewlinesNormalized: true
+    };
+  }
+
+  const BINARY_CHUNK_SIZE = 256 * 1024;
+
+  async function chunkBinaryFixed256KiB(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    const parts = [];
+    let idx = 0;
+    for (let offset = 0; offset < bytes.length; offset += BINARY_CHUNK_SIZE) {
+      const slice = bytes.slice(offset, Math.min(offset + BINARY_CHUNK_SIZE, bytes.length));
+      const hash = await sha256Hex(slice);
+      parts.push({ index: idx++, hash, lengthBytes: slice.byteLength, bytes: slice });
+    }
+    return { parts, endsWithNewline: false, reassembledSizeBytes: bytes.byteLength, chunkingStrategy: 'FIXED_256_KIB', textNewlinesNormalized: false };
+  }
+
+  async function fetchFiles() {
+    const resp = await fetch('/api/files');
+    return resp.json();
+  }
+
+  async function initUpload(payload) {
+    const resp = await fetch('/api/files/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    return resp.json();
+  }
+
+  async function completeUpload(fileId, versionId, partBytesByHash) {
+    const resp = await fetch(`/api/files/${fileId}/versions/${versionId}/complete`, { method: 'POST' });
+    if (resp.status === 409) {
+      const body = await resp.json();
+      if (body && Array.isArray(body.missingChunks) && body.missingChunks.length > 0) {
+        downloadHintEl.textContent = `Server reports ${body.missingChunks.length} missing unique chunks; re-uploading...`;
+        await uploadMissingChunksByHash(body.missingChunks, partBytesByHash);
+        return completeUpload(fileId, versionId, partBytesByHash);
+      }
+    }
+    if (!resp.ok) throw new Error(await resp.text());
+  }
+
+  async function uploadMissingChunks(missingParts, partBytesByIndex) {
+    for (const mp of missingParts) {
+      const bytes = partBytesByIndex.get(mp.index);
+      const putResp = await fetch(mp.uploadUrl, { method: 'PUT', body: bytes });
+      if (!putResp.ok) throw new Error(`PUT failed index=${mp.index} status=${putResp.status}`);
+    }
+  }
+
+  async function uploadMissingChunksByHash(missingChunks, partBytesByHash) {
+    for (const mc of missingChunks) {
+      const bytes = partBytesByHash.get(mc.hash);
+      if (!bytes) throw new Error('missing bytes for hash ' + mc.hash);
+      const putResp = await fetch(mc.uploadUrl, { method: 'PUT', body: bytes });
+      if (!putResp.ok) throw new Error(`PUT failed hash=${mc.hash} status=${putResp.status}`);
+    }
+  }
+
+  async function refreshMeta() {
+    const files = await fetchFiles();
+    const f = files.find(x => x.id === fileId);
+    if (!f) {
+      titleEl.textContent = 'File not found';
+      metaEl.textContent = '';
+      return null;
+    }
+    titleEl.textContent = f.fileName;
+    metaEl.textContent = `id=${f.id} | status=${f.status} | sizeBytes=${f.sizeBytes} | type=${f.contentType}`;
+    window.currentFile = f;
+    // also fetch a lightweight manifest signature and store it for change detection
+    try {
+      const mresp = await fetch(`/api/files/${fileId}/manifest`);
+      if (mresp.ok) {
+        const manifest = await mresp.json();
+        const sig = (manifest.parts || []).map(p => p.hash).join(',');
+        window.currentManifestSignature = sig;
+        window.currentManifest = manifest;
+      } else {
+        window.currentManifestSignature = null;
+        window.currentManifest = null;
+      }
+    } catch (e) {
+      window.currentManifestSignature = null;
+      window.currentManifest = null;
+    }
+    return f;
+  }
+
+  async function download() {
+    previewEl.textContent = '';
+    downloadHintEl.textContent = '';
+
+    let manifest;
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (!resp.ok) {
+        downloadHintEl.textContent = 'Not available yet (still processing notifications).';
+        return;
+      }
+      manifest = await resp.json();
+    } catch (e) {
+      downloadHintEl.textContent = 'Failed to fetch manifest: ' + e.message;
+      return;
+    }
+
+    const parts = manifest.parts;
+    if (manifest.chunkingStrategy === 'ROLLING_TEXT_NORMALIZED_LF') {
+      const bufs = [];
+      let total = 0;
+      for (const p of parts) {
+        const r = await fetch(p.downloadUrl);
+        const buf = await r.arrayBuffer();
+        const u = new Uint8Array(buf);
+        bufs.push(u);
+        total += u.byteLength;
+      }
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const b of bufs) { out.set(b, off); off += b.byteLength; }
+      previewEl.textContent = new TextDecoder().decode(out);
+    } else {
+      const bufs = [];
+      let total = 0;
+      for (const p of parts) {
+        const r = await fetch(p.downloadUrl);
+        const buf = await r.arrayBuffer();
+        bufs.push(new Uint8Array(buf));
+        total += buf.byteLength;
+      }
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const b of bufs) {
+        out.set(b, off);
+        off += b.byteLength;
+      }
+      const blob = new Blob([out], { type: manifest.contentType || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = manifest.fileName;
+      a.textContent = 'Download file';
+      downloadHintEl.innerHTML = '';
+      downloadHintEl.appendChild(a);
+      previewEl.textContent = 'Binary file reassembled (' + total + ' bytes).';
+    }
+  }
+
+  // Download reassembled file as an actual file (for text and binary)
+  async function downloadAsFile() {
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (!resp.ok) { downloadHintEl.textContent = 'Not available yet.'; return; }
+      const manifest = await resp.json();
+      const parts = manifest.parts;
+      if (manifest.chunkingStrategy === 'ROLLING_TEXT_NORMALIZED_LF') {
+        const bufs = [];
+        let total = 0;
+        for (const p of parts) {
+          const r = await fetch(p.downloadUrl);
+          const buf = await r.arrayBuffer();
+          const u = new Uint8Array(buf);
+          bufs.push(u);
+          total += u.byteLength;
+        }
+        const out = new Uint8Array(total);
+        let off = 0;
+        for (const b of bufs) { out.set(b, off); off += b.byteLength; }
+        const text = new TextDecoder().decode(out);
+        const blob = new Blob([text], { type: manifest.contentType || 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = manifest.fileName; document.body.appendChild(a); a.click(); a.remove();
+      } else {
+        // binary handled in download() UI path
+        await download();
+      }
+    } catch (e) {
+      downloadHintEl.textContent = 'Failed to download: ' + e.message;
+    }
+  }
+
+  // Edit in-place: show editor populated from reassembled text
+  async function enterEditMode() {
+    previewEl.textContent = '';
+    downloadHintEl.textContent = '';
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (!resp.ok) { downloadHintEl.textContent = 'Not available yet.'; return; }
+      const manifest = await resp.json();
+      if (manifest.chunkingStrategy !== 'ROLLING_TEXT_NORMALIZED_LF') { downloadHintEl.textContent = 'Not a text file.'; return; }
+      const bufs = [];
+      let total = 0;
+      for (const p of manifest.parts) {
+        const r = await fetch(p.downloadUrl);
+        const buf = await r.arrayBuffer();
+        const u = new Uint8Array(buf);
+        bufs.push(u);
+        total += u.byteLength;
+      }
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const b of bufs) { out.set(b, off); off += b.byteLength; }
+      editText.value = new TextDecoder().decode(out);
+      editorArea.style.display = 'block';
+      // editor opened, mark not dirty until user types
+      window.editDirty = false;
+      remoteChangedNotice.style.display = 'none';
+    } catch (e) {
+      downloadHintEl.textContent = 'Failed to load for editing: ' + e.message;
+    }
+  }
+
+  async function saveEditAsVersion() {
+    try {
+      const text = editText.value || '';
+      // clear any previous diff UI
+      diffResult.style.display = 'none';
+      const chunkPlan = await chunkTextRollingNormalizedLf(text);
+      // if user wants to preview diff, compute and show it, allow cancel
+      if (showDiffCb.checked) {
+        const { same, changed } = await computeChunkDiff(chunkPlan);
+        renderDiffResult(same, changed);
+        if (!confirm(`About to upload ${changed.length} unique changed chunks (of ${chunkPlan.parts.length} parts). Proceed?`)) {
+          return;
+        }
+      }
+      const partsDto = chunkPlan.parts.map(p => ({ index: p.index, hash: p.hash, lengthBytes: p.lengthBytes }));
+      const partBytesByIndex = new Map(chunkPlan.parts.map(p => [p.index, p.bytes]));
+      const partBytesByHash = new Map(chunkPlan.parts.map(p => [p.hash, p.bytes]));
+
+      const current = window.currentFile || await refreshMeta();
+      const initPayload = {
+        fileId,
+        fileName: current.fileName,
+        contentType: current.contentType || 'text/plain',
+        chunkingStrategy: chunkPlan.chunkingStrategy,
+        textNewlinesNormalized: chunkPlan.textNewlinesNormalized,
+        endsWithNewline: chunkPlan.endsWithNewline,
+        reassembledSizeBytes: chunkPlan.reassembledSizeBytes,
+        parts: partsDto
+      };
+
+      const initResp = await initUpload(initPayload);
+      await uploadMissingChunks(initResp.missingParts, partBytesByIndex);
+      await completeUpload(initResp.fileId, initResp.versionId, partBytesByHash);
+
+      editorArea.style.display = 'none';
+      await refreshMeta();
+      downloadHintEl.textContent = 'Update submitted.';
+    } catch (e) {
+      downloadHintEl.textContent = 'Failed to save update: ' + e.message;
+    }
+  }
+
+  fileInput.addEventListener('change', () => {
+    uploadBtn.disabled = !(fileInput.files && fileInput.files.length === 1);
+  });
+
+  uploadBtn.addEventListener('click', async () => {
+    const f = fileInput.files[0];
+    if (!f) return;
+
+    const contentType = f.type || 'application/octet-stream';
+    let chunkPlan;
+    if (isTextType(contentType)) {
+      chunkPlan = await chunkTextRollingNormalizedLf(await f.text());
+    } else {
+      chunkPlan = await chunkBinaryFixed256KiB(await f.arrayBuffer());
+    }
+
+    const partsDto = chunkPlan.parts.map(p => ({ index: p.index, hash: p.hash, lengthBytes: p.lengthBytes }));
+    const partBytesByIndex = new Map(chunkPlan.parts.map(p => [p.index, p.bytes]));
+    const partBytesByHash = new Map(chunkPlan.parts.map(p => [p.hash, p.bytes]));
+
+    const initPayload = {
+      fileId,
+      fileName: f.name,
+      contentType,
+      chunkingStrategy: chunkPlan.chunkingStrategy,
+      textNewlinesNormalized: chunkPlan.textNewlinesNormalized,
+      endsWithNewline: chunkPlan.endsWithNewline,
+      reassembledSizeBytes: chunkPlan.reassembledSizeBytes,
+      parts: partsDto
+    };
+
+    // preview diff if requested
+    if (showDiffCb.checked) {
+      const { same, changed } = await computeChunkDiff(chunkPlan);
+      renderDiffResult(same, changed);
+      if (!confirm(`About to upload ${changed.length} unique changed chunks (of ${chunkPlan.parts.length} parts). Proceed?`)) {
+        return;
+      }
+    }
+
+    const initResp = await initUpload(initPayload);
+    await uploadMissingChunks(initResp.missingParts, partBytesByIndex);
+    await completeUpload(initResp.fileId, initResp.versionId, partBytesByHash);
+
+    await refreshMeta();
+    alert('Update submitted. Status will flip to AVAILABLE once all chunk events are processed.');
+  });
+
+  // Add Edit button UI
+  const editBtn = document.createElement('button');
+  editBtn.textContent = 'Edit text and upload new version';
+  editBtn.style.marginLeft = '0.5rem';
+  editBtn.addEventListener('click', enterEditMode);
+  document.querySelector('.card h2').appendChild(editBtn);
+
+  saveEditBtn.addEventListener('click', saveEditAsVersion);
+  cancelEditBtn.addEventListener('click', () => { editorArea.style.display = 'none'; });
+  downloadFileBtn.addEventListener('click', downloadAsFile);
+
+  // mark editor dirty when user types
+  editText.addEventListener('input', () => { window.editDirty = true; });
+
+  // Preview diff button (manual)
+  previewDiffBtn.addEventListener('click', async () => {
+    try {
+      let chunkPlan;
+      if (editorArea.style.display === 'block') {
+        chunkPlan = await chunkTextRollingNormalizedLf(editText.value || '');
+      } else {
+        const f = fileInput.files[0];
+        if (!f) { alert('No file selected'); return; }
+        if (isTextType(f.type || '')) chunkPlan = await chunkTextRollingNormalizedLf(await f.text());
+        else chunkPlan = await chunkBinaryFixed256KiB(await f.arrayBuffer());
+      }
+      const { same, changed } = await computeChunkDiff(chunkPlan);
+      renderDiffResult(same, changed);
+    } catch (e) { alert('Failed to compute diff: ' + e.message); }
+  });
+
+  reloadEditorBtn.addEventListener('click', async () => { await enterEditMode(); remoteChangedNotice.style.display = 'none'; });
+
+  // Compute which planned parts match current manifest
+  async function computeChunkDiff(chunkPlan) {
+    let currentHashes = new Set();
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (resp.ok) {
+        const manifest = await resp.json();
+        for (const p of manifest.parts || []) currentHashes.add(p.hash);
+      }
+    } catch (e) {
+      // ignore
+    }
+    const same = [];
+    const changed = [];
+    // unique by hash
+    const seen = new Set();
+    for (const p of chunkPlan.parts) {
+      if (seen.has(p.hash)) continue;
+      seen.add(p.hash);
+      if (currentHashes.has(p.hash)) same.push(p.hash); else changed.push(p.hash);
+    }
+    return { same, changed };
+  }
+
+  function renderDiffResult(same, changed) {
+    diffResult.style.display = 'block';
+    diffResult.innerHTML = `Same: ${same.length}\n${same.slice(0,40).join('\n')}\n\nChanged (will upload): ${changed.length}\n${changed.slice(0,80).join('\n')}`;
+  }
+
+  // Polling: auto-refresh preview/editor when remote changes
+  async function pollForRemoteChanges() {
+    try {
+      // refreshMeta will update window.currentManifestSignature
+      const before = window.currentManifestSignature || null;
+      await refreshMeta();
+      const after = window.currentManifestSignature || null;
+      if (before !== null && after !== null && before !== after) {
+        // remote changed
+        if (editorArea.style.display === 'block') {
+          if (!window.editDirty) {
+            // safe to auto-reload editor content
+            await enterEditMode();
+          } else {
+            // mark notice so user can choose to reload
+            remoteChangedNotice.style.display = 'block';
+          }
+        } else {
+          // not editing: refresh preview automatically
+          await download();
+        }
+      }
+    } catch (e) {
+      // ignore transient errors
+    }
+  }
+
+  // start polling every 3s
+  setInterval(pollForRemoteChanges, 3000);
+
+  document.getElementById('refreshBtn').addEventListener('click', refreshMeta);
+  document.getElementById('downloadBtn').addEventListener('click', async () => {
+    // If this is a text file, open the editor with the reassembled content; otherwise perform download preview
+    try {
+      const resp = await fetch(`/api/files/${fileId}/manifest`);
+      if (resp.ok) {
+        const manifest = await resp.json();
+        if (manifest.chunkingStrategy === 'ROLLING_TEXT_NORMALIZED_LF') {
+          await enterEditMode();
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore and fallback to download
+    }
+    await download();
+  });
+
+  refreshMeta();
+</script>
+</body>
+</html>

@@ -3,6 +3,14 @@
 This set of projects is based on the helloInterview design question.
 The goal is to implement different stages of a system design to understand the trade-offs and benefits of each approach.
 
+## What’s implemented (where)
+
+This repo is split into modules that correspond to the stages below:
+
+- Stage 1: [simplestVersion](simplestVersion/) (naive server-proxied upload)
+- Stage 2: [directS3](directS3/) (presigned direct-to-S3 upload + SNS/SQS notifications)
+ Stage 3: [chunkS3](chunkS3/) (client-side chunking + content-addressed chunks + retryable completion)
+ Stage 4: [rollingChunks](rollingChunks/) (rolling/content-defined chunking + durable DB change feed + SNS/SQS notify example)
 ## functional requirements
 1. can store file
 2. can retrieve files
@@ -208,7 +216,14 @@ aws --endpoint-url=http://localhost:4566 sqs receive-message --queue-url http://
 
 ## Stage 3: Chunking & Fingerprinting
 
-For large files and sync efficiency, we split files into chunks. We use fingerprinting (rolling hash or simple chunk hash) to detect duplicates.
+For large files and sync efficiency, we split files into chunks and hash each chunk so we can detect duplicates.
+
+What’s implemented in [chunkS3](chunkS3/):
+
+*   Text files: normalize CRLF → LF and chunk **by line** (`TEXT_LINES_NORMALIZED_LF`) so editing one line only re-uploads one “chunk”.
+    - This is intentionally **not** standard Dropbox-style CDC; it’s a simple educational strategy.
+*   Non-text/binary: split into **fixed 256 KiB** chunks (`FIXED_256_KIB`).
+*   Rolling / content-defined chunking is covered in Stage 4.
 
 ### Design
 
@@ -262,7 +277,7 @@ sequenceDiagram
 *   **Deduplication**: Identical chunks (across files/users) are stored only once.
 
 ### Notes
-*   **AWS Constraints**: S3 Multipart upload has a 5MB minimum part size (except the last one). For this simulation (10 byte chunks), we might need to store chunks as individual small objects or ignore S3 multipart constraints by using putting individual objects.
+*   **AWS Constraints**: S3 Multipart upload has a 5MB minimum part size (except the last one). This stage stores each chunk as its own S3 object (not multipart-upload parts), so the multipart constraint doesn’t apply.
 
 ### Download Flow
 1.  Client requests file.
@@ -314,63 +329,75 @@ sequenceDiagram
 
 ## Stage 4: Notification Service (Async Updates)
 
-To satisfy the requirement of "syncing with changes done by others" without inefficient blocking or high-latency long-polling.
+Implemented in [rollingChunks](rollingChunks/).
 
-### Design
+Stage 4 adds two ideas:
 
-**Client-Side Change Detection**:
-The client runs a local file watcher. When a file is modified locally:
-1.  Client recalculates hashes.
-2.  Follows Stage 3 flow (Upload missing chunks, Finalize).
+1) **Rolling/content-defined chunking (CDC)** for text so inserts don’t shift every subsequent chunk.
+2) A **durable change feed** in the DB with a **per-device cursor** (“last seen event”), so devices can catch up after being offline.
 
-**Server-Side Notification**:
-We use a Polling model for the simulation (Simulating a message queue buffer).
-*   When a file is updated, the Server publishes an event to an SQS Queue unique to the client (or filtered).
-*   Clients periodically **poll** their queue for updates.
+SNS/SQS is still shown, but only as an **online notification hint**. The DB remains the source-of-truth.
+
+### Durable change feed (source of truth)
+
+- DB tables:
+    - `change_event` (append-only ordered feed)
+    - `device_checkpoint` (per-device last seen event id)
+- API:
+    - `GET /api/changes?deviceId=...` (read changes since last seen)
+    - `POST /api/changes/ack` (advance last seen)
+
+### SNS/SQS online notify (example)
+
+On “version became AVAILABLE”:
+
+- Persist a `change_event` (durable)
+- Publish an SNS message (best effort)
+- Deliver to an SQS queue to prompt clients to call `GET /api/changes`
 
 ```mermaid
 flowchart TD
-    ClientA["Client A (Uploader)"]
-    ClientB["Client B (Receiver)"]
+    Uploader[Uploader Device]
     AppServer[Application Server]
+    DB[(DB change_event)]
     SNS[SNS Topic]
     SQS[SQS Queue]
+    Receiver[Receiver Device]
 
-    ClientA -- .1. Upload File. --> AppServer
-    AppServer -- .2. Publish Event. --> SNS
-    SNS -- .3. Push Message. --> SQS
-    ClientB -- .4. Poll Messages. --> SQS
-    ClientB -- .5. Download Metadata. --> AppServer
+    Uploader -->|1. Upload completes| AppServer
+    AppServer -->|2. Insert change event| DB
+    AppServer -->|3. Publish notify best-effort| SNS
+    SNS --> SQS
+    Receiver -->|4. Receive notification| SQS
+    Receiver -->|5. GET /api/changes?deviceId=...| AppServer
+    Receiver -->|6. Ack cursor| AppServer
 ```
 
 ```mermaid
 sequenceDiagram
-    participant ClientA
-    participant ClientB
+    participant Uploader
     participant AppServer
+    participant DB
     participant SNS
-    participant SQS_B
+    participant SQS
+    participant Receiver
 
-    Note over ClientA: Local File Watcher detects change
-    ClientA->>AppServer: Complete Upload (Stage 3 flows)
+    Uploader->>AppServer: Upload completes (Stage 3/4 chunk flow)
     activate AppServer
-    AppServer->>SNS: Publish Event ("File X Updated")
+    AppServer->>DB: INSERT change_event (durable)
+    AppServer->>SNS: Publish notify (best effort)
     deactivate AppServer
-    
-    SNS->>SQS_B: Push Notification
-    
-    Note over ClientB: Periodic Poll
-    loop Every N Seconds
-        ClientB->>SQS_B: ReceiveMessage
-        activate SQS_B
-        SQS_B-->>ClientB: [Message: "File X Updated"]
-        deactivate SQS_B
-    end
-    
-    ClientB->>AppServer: Get File X Metadata (Stage 3 Flow)
+
+    SNS-->>SQS: Deliver message
+
+    Receiver->>SQS: Receive notification
+    Receiver->>AppServer: GET /api/changes?deviceId=receiver
+    AppServer->>DB: SELECT events after receiver cursor
+    AppServer-->>Receiver: change events
+    Receiver->>AppServer: POST /api/changes/ack
 ```
 
 ### Solves
-*   **Real-time Updates**: Clients know about changes quickly.
-*   **Efficiency**: Polling an empty SQS queue is cheaper/faster than querying a full database for "changes since X".
-*   **Offline Tolerance**: SQS queues persist messages (default retention is 4 days). If a client is offline, the message waits in the queue until the client comes back online and polls.
+*   **Offline tolerance**: devices can always catch up from the DB feed.
+*   **Real-time-ish updates**: SNS/SQS can nudge online devices to sync.
+*   **Clear correctness boundary**: SNS/SQS is best-effort; DB feed is durable.
