@@ -1,425 +1,264 @@
-# Dropbox System Design
+# Dropbox System Design — Examples
 
-This set of projects is based on the helloInterview design question.
-The goal is to implement different stages of a system design to understand the trade-offs and benefits of each approach.
+This repository contains several small example Spring Boot modules that demonstrate different approaches to browser file upload and sync with S3. The goal is educational: show trade-offs between simple server-proxied uploads, direct-to-S3 presigned flows, chunked/deduplicated storage, and rolling/content‑defined chunking.
 
-## What’s implemented (where)
+Top-level modules
 
-This repo is split into modules that correspond to the stages below:
+- `simplestVersion/` — Stage 1: naive server-proxied upload
+- `directS3/` — Stage 2: presigned direct-to-S3 upload + SNS/SQS examples
+- `chunkS3/` — Stage 3: client-side chunking + content-addressed chunks + retryable completion
+- `rollingChunks/` — Stage 4: rolling/content-defined chunking + durable DB change feed + SNS/SQS hinting
+- `multipartUpload/` — Option A reference: direct multipart uploads using presigned UploadPart URLs
 
-- Stage 1: [simplestVersion](simplestVersion/) (naive server-proxied upload)
-- Stage 2: [directS3](directS3/) (presigned direct-to-S3 upload + SNS/SQS notifications)
-- Stage 3: [chunkS3](chunkS3/) (client-side chunking + content-addressed chunks + retryable completion)
-- Stage 4: [rollingChunks](rollingChunks/) (rolling/content-defined chunking + durable DB change feed + SNS/SQS notify example)
+Quick note on terminology
 
-Reference implementation (not a “stage”):
+- Option A (direct multipart): server coordinates `CreateMultipartUpload` / presigns `UploadPart` URLs; client uploads parts directly and the server completes the upload. Good for straightforward large-file uploads.
+- Option B (chunk-store + manifest): client splits the file into chunks (possibly content‑addressed), server returns presigned URLs for missing chunks only; server assembles or reassembles as needed. Good for deduplication and sync-friendly behavior.
 
-- Option A: [multipartUpload](multipartUpload/) (direct multipart upload: browser -> S3 via presigned UploadPart URLs)
+When to use which
 
-## Option A vs Option B (when to use which)
+- Use Option A when you just need an efficient large-file upload path and don't care about cross-file deduplication or sync granularity. Note: real S3 multipart parts must be >= 5 MiB (except the last part).
+- Use Option B when you want deduplication, lower delta upload sizes for small edits, or better resumability across devices/versions.
 
-This repo shows two common approaches for uploading/syncing large files:
+Module summaries and key flows
 
-- **Option A — Direct multipart upload (browser -> S3)**
-    - Best when you just need to upload/download large blobs efficiently.
-    - Server coordinates `CreateMultipartUpload` / `CompleteMultipartUpload`, client uploads parts via presigned URLs.
-    - Production needs: part size constraints (S3: >= 5 MiB except last), retry logic, and cleanup of abandoned uploads.
-- **Option B — Chunk-store + manifest (dedup + sync-friendly)**
-    - Best when you care about deduplication, resumability, and “small edit -> small upload” behavior.
-    - Client sends a manifest of content-addressed chunks; server returns presigned URLs for missing chunks only.
-    - Storing chunks as separate S3 objects avoids multipart part-size constraints, but introduces more objects/metadata.
+**Stage 1 — simplestVersion (Naive server-proxied upload)**
 
-In this repo:
+Client → App → S3 (server receives full object and writes to S3). This is the simplest pattern but doubles server bandwidth and ties up server resources for large uploads.
 
-- Option A is demonstrated in [multipartUpload](multipartUpload/).
-- Option B is Stage 3 ([chunkS3](chunkS3/)) and Stage 4 ([rollingChunks](rollingChunks/)).
-## functional requirements
-1. can store file
-2. can retrieve files
-3. other users can retrieve files (getting permission to access files is Out Of Scope)
-4. can sync with changes done on local version
-5. can sync with changes done by others
-    - currently having multiple devices per user is Out Of Scope
-
-## Nonfunctional Requirements
-1. availability >> consistency (we do not care if it takes a few seconds to get an update, but we do not want an error getting something)
-2. reasonable download/upload times (size dependant)
-3. continue load if load gets stopped in the middle
-4. big files
-
-## Simulation Requirements
-1. **LocalStack**: Used to simulate AWS Services (S3, etc.).
-2. **AOP Delays**: Artificial delays introduced via AOP to simulate network load/processing time, allowing us to observe the impact of architectural decisions.
-
----
-
-## Stage 1: Simplest Version (Naive Approach)
-
-In this version, the client uploads the file directly to the application server. The server then uploads it to S3 and saves the metadata in the database.
-
-### Design
+Mermaid (flowchart):
 
 ```mermaid
 flowchart TD
-    Client[Client Device]
-    AppServer[Application Server]
-    DB[(Database)]
-    S3[S3 Storage]
-
-    Client -- .1. Upload File + Metadata. --> AppServer
-    AppServer -- .2. Store Metadata. --> DB
-    AppServer -- .3. Upload File. --> S3
+  Client[Client Device] -->|1. POST /upload (file)| AppServer[Application Server]
+  AppServer -->|2. PutObject| S3[(S3)]
+  AppServer -->|3. Save metadata| DB[(Database)]
 ```
+
+Sequence diagram:
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant AppServer
-    participant DB
-    participant S3
+  participant Client
+  participant AppServer
+  participant S3
+  participant DB
 
-    Note over Client, S3: Upload Flow
-    Client->>AppServer: POST /upload (File + Metadata)
-    activate AppServer
-    AppServer->>S3: PutObject(File)
-    AppServer->>DB: Save Metadata (s3_path, size, name)
-    AppServer-->>Client: 200 OK
-    deactivate AppServer
-
-    Note over Client, S3: Download Flow
-    Client->>AppServer: GET /file/{id}
-    activate AppServer
-    AppServer->>DB: Get Metadata
-    AppServer->>S3: Generate Presigned URL
-    AppServer-->>Client: Metadata + Presigned URL
-    deactivate AppServer
-    Client->>S3: GET (Presigned URL)
+  Client->>AppServer: POST /upload (file)
+  AppServer->>S3: PutObject (file content)
+  S3-->>AppServer: 200 OK
+  AppServer->>DB: Save metadata
+  AppServer-->>Client: 200 OK
 ```
 
-### Problems
-1.  **Double Bandwidth**: The file travels `Client -> Server` and then `Server -> S3`. This doubles the network IO on the server.
-2.  **Blocking**: Large files block the application server threads/resources while being uploaded to S3.
-3.  **Gateway Limits**: API Gateways often have strict payload size limits, preventing large file uploads.
+**Stage 2 — directS3 (Presigned PUT / notification via SNS->SQS)**
 
----
+Client asks server for a presigned PUT URL; client uploads directly to S3. The server uses SNS->SQS for durable asynchronous notifications of ObjectCreated events to update the database.
 
-## Stage 2: Direct S3 Upload (Presigned URLs)
-
-To solve the double bandwidth and blocking issues, the client uploads files directly to S3 using a presigned URL.
-
-### Design
+Mermaid (flowchart):
 
 ```mermaid
 flowchart TD
-    Client[Client Device]
-    AppServer[Application Server]
-    DB[(Database)]
-    S3[S3 Storage]
-
-    Client -- .1. Init Upload. --> AppServer
-    AppServer -- .2. Save Metadata (Pending). --> DB
-    AppServer -- .3. Return Presigned URL. --> Client
-    Client -- .4. Upload File. --> S3
-    S3 -- .Async Notification. --> AppServer
-    AppServer -- .5. Update Metadata (Available). --> DB
+  Client -->|1. init metadata| AppServer
+  AppServer -->|2. presign PUT| Client
+  Client -->|3. PUT (presigned)| S3
+  S3 -->|4. ObjectCreated -> SNS| SNS[SNS]
+  SNS --> SQS[SQS]
+  SQS --> AppServer
+  AppServer --> DB[(Database)]
 ```
+
+Sequence diagram:
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant AppServer
-    participant DB
-    participant S3
+  participant Client
+  participant AppServer
+  participant S3
+  participant SNS
+  participant SQS
+  participant DB
 
-    Note over Client, S3: Upload Flow
-    Client->>AppServer: POST /upload/init (Metadata)
-    activate AppServer
-    AppServer->>DB: Save Metadata (Status: PENDING)
-    AppServer->>S3: Generate Presigned PUT URL
-    AppServer-->>Client: Presigned URL
-    deactivate AppServer
-    
-    Client->>S3: PUT (Presigned URL, File Content)
-    activate S3
-    S3-->>Client: 200 OK
-    S3->>AppServer: S3 Event Notification (ObjectCreated)
-    deactivate S3
-    
-    activate AppServer
-    AppServer->>DB: Update Metadata (Status: AVAILABLE)
-    deactivate AppServer
-
-    Note over Client, S3: Download Flow
-    Client->>AppServer: GET /file/{id}
-    activate AppServer
-    AppServer->>DB: Get Metadata
-    AppServer->>S3: Generate Presigned GET URL
-    AppServer-->>Client: Metadata + Presigned URL
-    deactivate AppServer
-    Client->>S3: GET (Presigned URL)
-```
-
-### Solves
-*   **Bandwidth**: Server only handles small metadata requests. Heavy lifting is done by S3.
-*   **Scalability**: Server can handle many more concurrent users since it's not tied up with streaming bytes.
-
-### Issues
-*   **Complexity**: Requires handling async notifications from S3.
-*   **Consistency**: What if the upload fails? The DB might have a stale "PENDING" record.
-
-### Recommended Notification Flow (Production)
-
-To make the notification path durable and production-ready we recommend S3 -> SNS -> SQS -> Consumer. This keeps a reliable queue for consumers and allows fan-out via SNS if multiple subscribers are needed.
-
-```mermaid
-flowchart TD
-        S3[S3] -->|ObjectCreated| SNS[SNS Topic]
-        SNS --> SQS[SQS Queue]
-        SQS --> AppServer[Application Consumer]
-```
-
-Sequence (S3 -> SNS -> SQS):
-
-```mermaid
-sequenceDiagram
-        participant S3
-        participant SNS
-        participant SQS
-        participant App
-
-        S3->>SNS: Publish ObjectCreated event
-        SNS-->>SQS: Deliver Notification
-        App->>SQS: Poll & Receive Message
-        App->>App: Parse SNS envelope -> Extract S3 key
-        App->>DB: Update metadata status (AVAILABLE)
-```
-
-Notification payloads:
-
- - Direct S3 event (inside `Message` for SNS envelope or as Records for direct SQS):
-
-```json
-{
-    "Records":[
-        {
-            "eventVersion":"2.1",
-            "eventSource":"aws:s3",
-            "awsRegion":"us-east-1",
-            "eventName":"ObjectCreated:Put",
-            "s3":{
-                "bucket":{"name":"test-bucket"},
-                "object":{"key":"09ba5a75-c02d-4d57-b020-1d2016ce1d16"}
-            }
-        }
-    ]
-}
-```
-
- - SNS envelope (what SQS receives when subscribed to SNS):
-
-```json
-{
-    "Type":"Notification",
-    "MessageId":"...",
-    "TopicArn":"arn:aws:sns:...",
-    "Message":"{ \"Records\":[ { \"s3\":{ \"object\":{ \"key\":\"...\" } } } ] }"
-}
-```
-
-You can inspect messages in LocalStack using the AWS CLI with the `--endpoint-url` flag, for example:
-
-```bash
-aws --endpoint-url=http://localhost:4566 sns list-topics
-aws --endpoint-url=http://localhost:4566 sqs list-queues
-aws --endpoint-url=http://localhost:4566 sqs receive-message --queue-url http://localhost:4566/000000000000/your-queue
-```
-
----
-
-## Stage 3: Chunking & Fingerprinting
-
-For large files and sync efficiency, we split files into chunks and hash each chunk so we can detect duplicates.
-
-What’s implemented in [chunkS3](chunkS3/):
-
-*   Text files: normalize CRLF → LF and chunk **by line** (`TEXT_LINES_NORMALIZED_LF`) so editing one line only re-uploads one “chunk”.
-    - This is intentionally **not** standard Dropbox-style CDC; it’s a simple educational strategy.
-*   Non-text/binary: split into fixed-size chunks (configurable via `app.chunk.binary.size-bytes`); demos use small sizes (e.g., 64 bytes) for visibility, while production may use larger sizes such as 5 MiB, the AWS minimum for S3 multipart part-size constraints as an example).
-*   Rolling / content-defined chunking is covered in Stage 4.
-
-### Design
-
-*   Chunking and reassembly are **client-side**.
-*   Client calculates a SHA-256 hash for each chunk.
-*   Server stores **metadata only** (the "Recipe" / manifest: ordered list of (hash, length)).
-*   Chunks are stored in S3 as **content-addressed objects**: `chunks/sha256/<hash>`.
-*   Client calls `POST /api/files/init` with the manifest; server returns presigned PUT URLs for **missing** chunks.
-*   Client uploads only missing chunks directly to S3.
-*   Client calls `POST /api/files/{fileId}/versions/{versionId}/complete` to finalize.
-    - If any expected chunks are still missing, the server returns `409` with presigned URLs for the missing chunk hashes.
-*   Status flow: `PENDING` (new) / `UPDATING` (new version) → `AVAILABLE` when all expected chunk events are observed.
-
-```mermaid
-flowchart TD
-    Client[Client Device]
-    AppServer[Application Server]
-    DB[(Database)]
-    S3[S3 Storage]
-
-    Client -- .1. Init (manifest). --> AppServer
-    AppServer -- .2. Save metadata (PENDING/UPDATING). --> DB
-    AppServer -- .3. Return missing hashes + presigned PUTs. --> Client
-    Client -- .4. Upload missing chunks. --> S3
-    S3 -- .Async notifications. --> AppServer
-    Client -- .5. Complete version. --> AppServer
-    AppServer -- .6. Mark AVAILABLE when all chunks seen. --> DB
-```
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant AppServer
-    participant DB
-    participant S3
-
-    Note over Client, S3: Upload Flow
-    Client->>Client: Split -> chunks [A, B, C]
-    Client->>Client: Hash -> [h(A), h(B), h(C)]
-    Client->>AppServer: POST /api/files/init (fileName, contentType, parts=[(h, len)])
-    AppServer->>DB: Save file + version (status PENDING/UPDATING)
-    AppServer-->>Client: missingParts + presigned PUT URLs
-    Client->>S3: PUT missing chunks (presigned)
-    S3-->>AppServer: ObjectCreated notifications (via SNS/SQS)
-    Client->>AppServer: POST /api/files/{fileId}/versions/{versionId}/complete
-    AppServer->>DB: Mark AVAILABLE once all expected chunks are present
-```
-
-### Solves
-*   **Network Efficiency**: Only changes (deltas) are transferred.
-*   **Deduplication**: Identical chunks (across files/users) are stored only once.
-
-### Notes
-*   **AWS Constraints**: S3 Multipart upload has a 5MB minimum part size (except the last one). This stage stores each chunk as its own S3 object (not multipart-upload parts), so the multipart constraint doesn’t apply.
-
-### Download Flow
-1.  Client requests file.
-2.  Server retrieves "Recipe" (list of chunks) from DB.
-3.  Server generates presigned URLs for each chunk (or checks if client already has them in a local cache - Out of Scope for now).
-4.  Client downloads chunks in parallel and reassembles the file.
-
-```mermaid
-flowchart TB
-  subgraph Stage3["Stage 3: Chunking — Download Flow"]
-    Client["Client Device"]
-    AppServer["Application Server"]
-    DB[(Database)]
-    S3["S3 Storage"]
-    Reassemble["Reassemble File (Local)"]
-
-    Client -->|"1. GET /file/{id}"| AppServer
-    AppServer -->|"2. Get Recipe (chunk list)"| DB
-    AppServer -->|"3. Generate Presigned URLs (chunks)"| S3
-    AppServer -->|"4. Return Recipe + URLs"| Client
-    Client -->|"5. Download Chunks (Parallel)"| S3
-    Client -->|"6. Reassemble chunks locally"| Reassemble
+  Client->>AppServer: POST /upload/init
+  AppServer-->>Client: presigned PUT URL
+  Client->>S3: PUT (file content)
+  S3-->>Client: 200 OK
+  
+  rect rgb(240, 240, 240)
+  note right of S3: Async Notification
+  S3->>SNS: ObjectCreated Event
+  SNS->>SQS: Push Message
+  AppServer->>SQS: Poll/Receive Message
+  AppServer->>DB: Mark file as ACTIVE
   end
 ```
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant AppServer
-    participant DB
-    participant S3
+**Option A — multipartUpload (Direct multipart upload with presigned UploadPart URLs)**
 
-    Client->>AppServer: GET /file/{id}
-    activate AppServer
-    AppServer->>DB: Get Recipe [h(A), h(B)]
-    AppServer->>S3: Generate URLs for A, B
-    AppServer-->>Client: Recipe + URLs
-    deactivate AppServer
-    
-    par Download Chunks
-        Client->>S3: GET chunk A
-        Client->>S3: GET chunk B
-    end
-    
-    Client->>Client: Reassemble File
-```
+This module implements the pattern where the server coordinates a multipart upload. The client requests separate presigned URLs for each part.
 
----
-
-## Stage 4: Notification Service (Async Updates)
-
-Implemented in [rollingChunks](rollingChunks/).
-
-Stage 4 adds two ideas:
-
-1) **Rolling/content-defined chunking (CDC)** for text so inserts don’t shift every subsequent chunk.
-2) A **durable change feed** in the DB with a **per-device cursor** (“last seen event”), so devices can catch up after being offline.
-
-SNS/SQS is still shown, but only as an **online notification hint**. The DB remains the source-of-truth.
-
-### Durable change feed (source of truth)
-
-- DB tables:
-    - `change_event` (append-only ordered feed)
-    - `device_checkpoint` (per-device last seen event id)
-- API:
-    - `GET /api/changes?deviceId=...` (read changes since last seen)
-    - `POST /api/changes/ack` (advance last seen)
-
-### SNS/SQS online notify (example)
-
-On “version became AVAILABLE”:
-
-- Persist a `change_event` (durable)
-- Publish an SNS message (best effort)
-- Deliver to an SQS queue to prompt clients to call `GET /api/changes`
+Mermaid (flowchart):
 
 ```mermaid
 flowchart TD
-    Uploader[Uploader Device]
-    AppServer[Application Server]
-    DB[(DB change_event)]
-    SNS[SNS Topic]
-    SQS[SQS Queue]
-    Receiver[Receiver Device]
+  Client -->|1. POST /api/multipart/init| AppServer
+  AppServer -->|2. CreateMultipartUpload| S3
+  AppServer -->> Client: uploadId + objectKey + partSizeBytes
 
-    Uploader -->|1. Upload completes| AppServer
-    AppServer -->|2. Insert change event| DB
-    AppServer -->|3. Publish notify best-effort| SNS
-    SNS --> SQS
-    Receiver -->|4. Receive notification| SQS
-    Receiver -->|5. GET /api/changes?deviceId=...| AppServer
-    Receiver -->|6. Ack cursor| AppServer
+  loop For each part
+    Client -->|3. POST /api/multipart/presign| AppServer
+    AppServer -->> Client: presigned UploadPart URL
+    Client -->|4. PUT part| S3
+    S3 -->> Client: 200 OK + ETag
+  end
+
+  Client -->|5. POST /api/multipart/complete| AppServer
+  AppServer -->|6. CompleteMultipartUpload| S3
+  AppServer -->> Client: download URL
 ```
+
+Sequence diagram:
 
 ```mermaid
 sequenceDiagram
-    participant Uploader
-    participant AppServer
-    participant DB
-    participant SNS
-    participant SQS
-    participant Receiver
+  participant Client
+  participant App
+  participant S3
 
-    Uploader->>AppServer: Upload completes (Stage 3/4 chunk flow)
-    activate AppServer
-    AppServer->>DB: INSERT change_event (durable)
-    AppServer->>SNS: Publish notify (best effort)
-    deactivate AppServer
+  Client->>App: POST /api/multipart/init
+  App->>S3: CreateMultipartUpload
+  App-->>Client: uploadId, objectKey, partSizeBytes
 
-    SNS-->>SQS: Deliver message
+  Client->>App: POST /api/multipart/presign (uploadId, partNumber)
+  App-->>Client: presigned UploadPart URL
+  Client->>S3: PUT part (presigned URL)
+  S3-->>Client: 200 + ETag
 
-    Receiver->>SQS: Receive notification
-    Receiver->>AppServer: GET /api/changes?deviceId=receiver
-    AppServer->>DB: SELECT events after receiver cursor
-    AppServer-->>Receiver: change events
-    Receiver->>AppServer: POST /api/changes/ack
+  Client->>App: POST /api/multipart/complete (parts[])
+  App->>S3: CompleteMultipartUpload
+  App-->>Client: presigned GET URL
 ```
 
-### Solves
-*   **Offline tolerance**: devices can always catch up from the DB feed.
-*   **Real-time-ish updates**: SNS/SQS can nudge online devices to sync.
-*   **Clear correctness boundary**: SNS/SQS is best-effort; DB feed is durable.
+**Stage 3 — chunkS3 (Client-side chunking + content-addressed chunks)**
+
+Client splits files into chunks and computes a hash for each chunk. The server returns presigned PUT URLs *only* for missing chunk hashes (deduplication). Chunks are stored as separate S3 objects (e.g., `chunks/sha256/<hash>`).
+
+Mermaid (flowchart):
+
+```mermaid
+flowchart TD
+  Client -->|1. Hash chunks & Init| AppServer
+  AppServer -->|2. Check DB for existing hashes| DB[(Database)]
+  AppServer -->>|3. Presigned URLs for MISSING chunks| Client
+  
+  loop For missing chunks
+    Client -->|4. PUT chunk| S3
+  end
+  
+  Client -->|5. Complete Upload| AppServer
+  AppServer -->|6. Link chunks to file version| DB
+```
+
+Sequence diagram:
+
+```mermaid
+sequenceDiagram
+  participant Client
+  participant AppServer
+  participant S3
+  participant DB
+
+  Client->>Client: Split file & Hash chunks
+  Client->>AppServer: POST /init (list of hashes)
+  AppServer->>DB: Check existing chunks
+  AppServer-->>Client: Return missing hashes + Presigned PUTs
+  
+  loop For each missing chunk
+    Client->>S3: PUT /chunks/<hash>
+  end
+  
+  Client->>AppServer: POST /complete
+  AppServer->>DB: Creating FileVersion mapping
+  AppServer-->>Client: 200 OK
+```
+
+Important note about demo vs production chunk sizes
+
+- The demo modules expose a property `app.chunk.binary.size-bytes` to control the binary chunk size. For local demos we intentionally use small sizes (e.g., 64 bytes) so the behavior is easy to observe. In production choose larger sizes (for example 256 KiB or larger) and be mindful of S3 multipart constraints if adapting this model to multipart parts.
+
+**Stage 4 — rollingChunks (Rolling/content-defined chunking + durable DB change feed)**
+
+Stage 4 improves on Stage 3 by using rolling hashes (CDC) to align chunks better for edits. It also adds a **Change Feed** for reliable client synchronization.
+
+Mermaid (flowchart):
+
+```mermaid
+flowchart TD
+  subgraph Upload
+    Client -->|1. Init (CDC Hashes)| AppServer
+    AppServer -->>|2. Missing Chunks| Client
+    Client -->|3. PUT Chunks| S3
+    Client -->|4. Complete| AppServer
+  end
+  
+  subgraph Sync
+    Client2[Client 2] -->|5. Poll /changes| AppServer
+    AppServer -->>|6. New File Events| Client2
+    Client2 -->|7. Get Manifest| AppServer
+    AppServer -->>|8. Chunk List| Client2
+  end
+```
+
+Sequence diagram (Upload & Sync):
+
+```mermaid
+sequenceDiagram
+  participant Client1
+  participant AppServer
+  participant S3
+  participant DB
+  participant Client2
+
+  Note over Client1: Upload Flow
+  Client1->>AppServer: POST /init (Rolling Hashes)
+  AppServer-->>Client1: Missing Chunks + Presigned URLs
+  Client1->>S3: PUT New Chunks
+  Client1->>AppServer: POST /complete
+  AppServer->>DB: Update State & Change Feed
+
+  Note over Client2: Sync Flow
+  Client2->>AppServer: GET /changes?since=X
+  AppServer-->>Client2: [Event: FileCreated ID:101]
+  Client2->>AppServer: GET /files/101/manifest
+  AppServer-->>Client2: Chunk List [H1, H2...]
+  Client2->>Client2: Check local chunks
+  Client2->>S3: GET /chunks/H1 (if missing)
+  Client2->>AppServer: POST /changes/ack
+```
+
+Running locally
+
+These examples are designed to be run with LocalStack for S3/SNS/SQS emulation. The repo contains `run-local.sh` at the root which will start LocalStack (if needed) and create/configure the demo buckets used by the modules.
+
+From the repository root (WSL recommended):
+
+```bash
+# Start LocalStack and bootstrap demo buckets (script may take a minute)
+./run-local.sh
+
+# Run a module (example: rollingChunks)
+cd rollingChunks
+mvn -DskipTests spring-boot:run
+```
+
+Tests
+
+- Each module contains unit/integration tests using JUnit and Testcontainers LocalStack where appropriate. Some modules intentionally disable SQS listeners in the test profile to avoid noisy connection errors during test shutdown.
+
+Contributing / Notes
+
+- These modules are intended as reference implementations and educational material. They are not hardened for production use. See module READMEs for per-module implementation notes and production limitations (CORS, part size minimums, cleanup of abandoned multipart uploads, etc.).
+
+---
+
+If you'd like, I can also extract this README into a shorter quickstart and a longer design doc; or I can open a PR with these changes. Which would you prefer?
