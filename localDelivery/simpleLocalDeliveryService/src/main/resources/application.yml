@@ -1,0 +1,10 @@
+server:
+  port: 8096
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5460/local_delivery
+    username: local
+    password: local
+  flyway:
+    enabled: true

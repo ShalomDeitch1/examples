@@ -1,0 +1,11 @@
+server:
+  port: 8094
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5440/local_delivery
+    username: local
+    password: local
+  jpa:
+    hibernate:
+      ddl-auto: none

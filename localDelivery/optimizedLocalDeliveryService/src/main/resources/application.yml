@@ -1,0 +1,14 @@
+server:
+  port: 8097
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  datasource:
+    url: jdbc:postgresql://localhost:5470/local_delivery
+    username: local
+    password: local
+  flyway:
+    enabled: true
