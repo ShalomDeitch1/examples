@@ -30,7 +30,7 @@ Mermaid (flowchart):
 
 ```mermaid
 flowchart TD
-  Client[Client Device] -->|1. POST /upload (file)| AppServer[Application Server]
+  Client[Client Device] -->|"1. POST /upload (file)"| AppServer[Application Server]
   AppServer -->|2. PutObject| S3[(S3)]
   AppServer -->|3. Save metadata| DB[(Database)]
 ```
@@ -44,11 +44,11 @@ sequenceDiagram
   participant S3
   participant DB
 
-  Client->>AppServer: POST /upload (file)
-  AppServer->>S3: PutObject (file content)
-  S3-->>AppServer: 200 OK
-  AppServer->>DB: Save metadata
-  AppServer-->>Client: 200 OK
+  Client-->"AppServer: POST /upload (file)"
+  AppServer-->""S3: PutObject (file content)
+  S3-->AppServer: 200 OK
+  AppServer-->DB: Save metadata
+  AppServer-->Client: 200 OK
 ```
 
 **Stage 2 — directS3 (Presigned PUT / notification via SNS->SQS)**
@@ -61,7 +61,7 @@ Mermaid (flowchart):
 flowchart TD
   Client -->|1. init metadata| AppServer
   AppServer -->|2. presign PUT| Client
-  Client -->|3. PUT (presigned)| S3
+  Client -->|"3. PUT (presigned)"| S3
   S3 -->|4. ObjectCreated -> SNS| SNS[SNS]
   SNS --> SQS[SQS]
   SQS --> AppServer
@@ -79,17 +79,17 @@ sequenceDiagram
   participant SQS
   participant DB
 
-  Client->>AppServer: POST /upload/init
-  AppServer-->>Client: presigned PUT URL
-  Client->>S3: PUT (file content)
-  S3-->>Client: 200 OK
+  Client-->AppServer: POST /upload/init
+  AppServer-->Client: presigned PUT URL
+  Client-->S3: PUT (file content)
+  S3-->Client: 200 OK
   
   rect rgb(240, 240, 240)
   note right of S3: Async Notification
-  S3->>SNS: ObjectCreated Event
-  SNS->>SQS: Push Message
-  AppServer->>SQS: Poll/Receive Message
-  AppServer->>DB: Mark file as ACTIVE
+  S3-->SNS: ObjectCreated Event
+  SNS-->SQS: Push Message
+  AppServer-->SQS: Poll/Receive Message
+  AppServer-->DB: Mark file as ACTIVE
   end
 ```
 
@@ -103,18 +103,18 @@ Mermaid (flowchart):
 flowchart TD
   Client -->|1. POST /api/multipart/init| AppServer
   AppServer -->|2. CreateMultipartUpload| S3
-  AppServer -->> Client: uploadId + objectKey + partSizeBytes
+  AppServer -->|uploadId + objectKey + partSizeBytes| Client
 
-  loop For each part
+  subgraph Loop [For each part]
     Client -->|3. POST /api/multipart/presign| AppServer
-    AppServer -->> Client: presigned UploadPart URL
+    AppServer -->|presigned UploadPart URL| Client
     Client -->|4. PUT part| S3
-    S3 -->> Client: 200 OK + ETag
+    S3 -->|200 OK + ETag| Client
   end
 
   Client -->|5. POST /api/multipart/complete| AppServer
   AppServer -->|6. CompleteMultipartUpload| S3
-  AppServer -->> Client: download URL
+  AppServer -->|download URL| Client
 ```
 
 Sequence diagram:
@@ -125,18 +125,18 @@ sequenceDiagram
   participant App
   participant S3
 
-  Client->>App: POST /api/multipart/init
-  App->>S3: CreateMultipartUpload
-  App-->>Client: uploadId, objectKey, partSizeBytes
+  Client-->App: POST /api/multipart/init
+  App-->S3: CreateMultipartUpload
+  App-->Client: uploadId, objectKey, partSizeBytes
 
-  Client->>App: POST /api/multipart/presign (uploadId, partNumber)
-  App-->>Client: presigned UploadPart URL
-  Client->>S3: PUT part (presigned URL)
-  S3-->>Client: 200 + ETag
+  Client-->App: POST /api/multipart/presign (uploadId, partNumber)
+  App-->Client: presigned UploadPart URL
+  Client-->S3: PUT part (presigned URL)
+  S3-->Client: 200 + ETag
 
-  Client->>App: POST /api/multipart/complete (parts[])
-  App->>S3: CompleteMultipartUpload
-  App-->>Client: presigned GET URL
+  Client-->App: POST /api/multipart/complete (parts[])
+  App-->S3: CompleteMultipartUpload
+  App-->Client: presigned GET URL
 ```
 
 **Stage 3 — chunkS3 (Client-side chunking + content-addressed chunks)**
@@ -149,9 +149,9 @@ Mermaid (flowchart):
 flowchart TD
   Client -->|1. Hash chunks & Init| AppServer
   AppServer -->|2. Check DB for existing hashes| DB[(Database)]
-  AppServer -->>|3. Presigned URLs for MISSING chunks| Client
+  AppServer -->|3. Presigned URLs for MISSING chunks| Client
   
-  loop For missing chunks
+  subgraph Loop [For missing chunks]
     Client -->|4. PUT chunk| S3
   end
   
@@ -168,18 +168,18 @@ sequenceDiagram
   participant S3
   participant DB
 
-  Client->>Client: Split file & Hash chunks
-  Client->>AppServer: POST /init (list of hashes)
-  AppServer->>DB: Check existing chunks
-  AppServer-->>Client: Return missing hashes + Presigned PUTs
+  Client-->Client: Split file & Hash chunks
+  Client-->AppServer: POST /init (list of hashes)
+  AppServer-->DB: Check existing chunks
+  AppServer-->Client: Return missing hashes + Presigned PUTs
   
   loop For each missing chunk
-    Client->>S3: PUT /chunks/<hash>
+    Client-->S3: PUT /chunks/<hash>
   end
   
-  Client->>AppServer: POST /complete
-  AppServer->>DB: Creating FileVersion mapping
-  AppServer-->>Client: 200 OK
+  Client-->AppServer: POST /complete
+  AppServer-->DB: Creating FileVersion mapping
+  AppServer-->Client: 200 OK
 ```
 
 Important note about demo vs production chunk sizes
@@ -195,17 +195,17 @@ Mermaid (flowchart):
 ```mermaid
 flowchart TD
   subgraph Upload
-    Client -->|1. Init (CDC Hashes)| AppServer
-    AppServer -->>|2. Missing Chunks| Client
+    Client -->|"1. Init (CDC Hashes)"| AppServer
+    AppServer -->|2. Missing Chunks| Client
     Client -->|3. PUT Chunks| S3
     Client -->|4. Complete| AppServer
   end
   
   subgraph Sync
     Client2[Client 2] -->|5. Poll /changes| AppServer
-    AppServer -->>|6. New File Events| Client2
+    AppServer -->|6. New File Events| Client2
     Client2 -->|7. Get Manifest| AppServer
-    AppServer -->>|8. Chunk List| Client2
+    AppServer -->|8. Chunk List| Client2
   end
 ```
 
@@ -220,20 +220,20 @@ sequenceDiagram
   participant Client2
 
   Note over Client1: Upload Flow
-  Client1->>AppServer: POST /init (Rolling Hashes)
-  AppServer-->>Client1: Missing Chunks + Presigned URLs
-  Client1->>S3: PUT New Chunks
-  Client1->>AppServer: POST /complete
-  AppServer->>DB: Update State & Change Feed
+  Client1-->AppServer: POST /init (Rolling Hashes)
+  AppServer-->Client1: Missing Chunks + Presigned URLs
+  Client1-->S3: PUT New Chunks
+  Client1-->AppServer: POST /complete
+  AppServer-->DB: Update State & Change Feed
 
   Note over Client2: Sync Flow
-  Client2->>AppServer: GET /changes?since=X
-  AppServer-->>Client2: [Event: FileCreated ID:101]
-  Client2->>AppServer: GET /files/101/manifest
-  AppServer-->>Client2: Chunk List [H1, H2...]
-  Client2->>Client2: Check local chunks
-  Client2->>S3: GET /chunks/H1 (if missing)
-  Client2->>AppServer: POST /changes/ack
+  Client2-->AppServer: GET /changes?since=X
+  AppServer-->Client2: [Event: FileCreated ID:101]
+  Client2-->AppServer: GET /files/101/manifest
+  AppServer-->Client2: Chunk List [H1, H2...]
+  Client2-->Client2: Check local chunks
+  Client2-->S3: GET /chunks/H1 (if missing)
+  Client2-->AppServer: POST /changes/ack
 ```
 
 Running locally
