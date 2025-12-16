@@ -11,8 +11,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.awspring.cloud.sqs.annotation.SqsListener;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Component
+@ConditionalOnProperty(name = "app.s3.notifications.sqs.enabled", havingValue = "true", matchIfMissing = true)
 public class SqsNotificationListener {
 
     private static final Logger log = LoggerFactory.getLogger(SqsNotificationListener.class);

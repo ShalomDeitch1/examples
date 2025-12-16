@@ -19,7 +19,7 @@
 <body>
 <h1>Stage 3 — Chunked Upload (Client-side)</h1>
 <p class="muted">
-  Text files are normalized to LF and chunked <b>line-by-line</b>. Other files are chunked into <b>256 KiB</b> pieces.
+  Text files are normalized to LF and chunked <b>line-by-line</b>. Other files are chunked into fixed-size pieces (server-configured).
   The browser uploads missing chunks directly to S3 using presigned URLs.
 </p>
 
@@ -69,6 +69,14 @@
     return contentType && contentType.startsWith('text/');
   }
 
+  async function getChunkingConfig() {
+    if (window.__chunkingConfig) return window.__chunkingConfig;
+    const resp = await fetch('/api/config/chunking');
+    if (!resp.ok) throw new Error('Failed to load chunking config');
+    window.__chunkingConfig = await resp.json();
+    return window.__chunkingConfig;
+  }
+
   async function chunkTextNormalizedLf(text) {
     const normalized = text.replace(/\r\n/g, '\n');
     const endsWithNewline = normalized.endsWith('\n');
@@ -93,14 +101,14 @@
     return { parts, endsWithNewline, reassembledSizeBytes: reassembledSize, chunkingStrategy: 'TEXT_LINES_NORMALIZED_LF', textNewlinesNormalized: true };
   }
 
-  const BINARY_CHUNK_SIZE = 256 * 1024;
-
   async function chunkBinaryFixed256KiB(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
+    const cfg = await getChunkingConfig();
+    const chunkSize = Number(cfg.binaryChunkSizeBytes);
     const parts = [];
     let idx = 0;
-    for (let offset = 0; offset < bytes.length; offset += BINARY_CHUNK_SIZE) {
-      const slice = bytes.slice(offset, Math.min(offset + BINARY_CHUNK_SIZE, bytes.length));
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      const slice = bytes.slice(offset, Math.min(offset + chunkSize, bytes.length));
       const hash = await sha256Hex(slice);
       parts.push({ index: idx++, hash, lengthBytes: slice.byteLength, bytes: slice });
     }

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Option A — Direct Multipart Upload (Client → S3)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; max-width: 980px; }
+    code { background: #f3f3f3; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 1rem; flex: 1; min-width: 320px; }
+    button { padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    button.primary { background: #111; color: #fff; border-color: #111; }
+    .muted { color: #666; }
+    .log { white-space: pre-wrap; background: #0b1020; color: #e7e7e7; padding: 0.8rem; border-radius: 10px; min-height: 120px; }
+  </style>
+</head>
+<body>
+<h1>Option A — Direct Multipart Upload (Client → S3)</h1>
+<p class="muted">
+  This is the “standard” pattern for uploading large files: the server coordinates multipart upload, while the browser uploads
+  parts directly to S3 using <code>UploadPart</code> presigned URLs.
+</p>
+<p class="muted">
+  Note: for real AWS S3, part size must be <b>≥ 5 MiB</b> (except the last part). This demo uses tiny parts.
+</p>
+
+<div class="row">
+  <div class="card">
+    <h2>Upload</h2>
+    <input id="fileInput" type="file"/>
+    <div style="margin-top: 0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+      <button id="uploadBtn" class="primary" disabled>Upload via multipart</button>
+      <button id="abortBtn" disabled>Abort</button>
+    </div>
+    <p class="muted" id="meta"></p>
+    <p class="muted" id="result"></p>
+  </div>
+
+  <div class="card">
+    <h2>Progress</h2>
+    <div id="log" class="log"></div>
+  </div>
+</div>
+
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const abortBtn = document.getElementById('abortBtn');
+  const logEl = document.getElementById('log');
+  const metaEl = document.getElementById('meta');
+  const resultEl = document.getElementById('result');
+
+  let current = null; // { uploadId, objectKey, partSizeBytes }
+
+  function log(msg) { logEl.textContent += msg + "\n"; }
+
+  fileInput.addEventListener('change', () => {
+    uploadBtn.disabled = !(fileInput.files && fileInput.files.length);
+  });
+
+  async function api(path, body) {
+    const resp = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    return resp.status === 204 ? null : resp.json();
+  }
+
+  async function presignPart(uploadId, objectKey, partNumber) {
+    const r = await api('/api/multipart/presign', { uploadId, objectKey, partNumber });
+    return r.uploadUrl;
+  }
+
+  function readEtag(putResp) {
+    // Browser can only read ETag if S3 responds with Access-Control-Expose-Headers: ETag.
+    const etag = putResp.headers.get('ETag');
+    if (!etag) {
+      throw new Error('Missing ETag header from S3 PUT response (check bucket CORS exposeHeaders).');
+    }
+    return etag;
+  }
+
+  uploadBtn.addEventListener('click', async () => {
+    const file = fileInput.files[0];
+    logEl.textContent = '';
+    resultEl.textContent = '';
+
+    metaEl.textContent = `Selected: ${file.name} (${file.type || 'application/octet-stream'}) size=${file.size}`;
+
+    log('Init multipart upload...');
+    current = await api('/api/multipart/init', {
+      fileName: file.name,
+      contentType: file.type || 'application/octet-stream',
+      sizeBytes: file.size
+    });
+
+    abortBtn.disabled = false;
+    log(`uploadId=${current.uploadId}`);
+    log(`objectKey=${current.objectKey}`);
+    log(`partSizeBytes=${current.partSizeBytes}`);
+
+    const partSize = Number(current.partSizeBytes);
+    const totalParts = Math.ceil(file.size / partSize);
+    log(`totalParts=${totalParts}`);
+
+    const completed = [];
+
+    for (let i = 0; i < totalParts; i++) {
+      const partNumber = i + 1;
+      const start = i * partSize;
+      const end = Math.min(start + partSize, file.size);
+      const blob = file.slice(start, end);
+
+      log(`Presign part ${partNumber} (${end - start} bytes)...`);
+      const url = await presignPart(current.uploadId, current.objectKey, partNumber);
+
+      log(`PUT part ${partNumber}...`);
+      const putResp = await fetch(url, { method: 'PUT', body: blob });
+      if (!putResp.ok) {
+        throw new Error(`UploadPart failed: part=${partNumber} status=${putResp.status}`);
+      }
+      const etag = readEtag(putResp);
+      completed.push({ partNumber, eTag: etag });
+      log(`Part ${partNumber} uploaded; ETag=${etag}`);
+    }
+
+    log('Completing multipart upload...');
+    const done = await api('/api/multipart/complete', {
+      uploadId: current.uploadId,
+      objectKey: current.objectKey,
+      parts: completed
+    });
+
+    resultEl.innerHTML = `Done. <a href="${done.downloadUrl}" target="_blank" rel="noreferrer">Download</a>`;
+    log('Complete.');
+  });
+
+  abortBtn.addEventListener('click', async () => {
+    if (!current) return;
+    log('Aborting multipart upload...');
+    await api('/api/multipart/abort', { uploadId: current.uploadId, objectKey: current.objectKey });
+    log('Aborted.');
+    abortBtn.disabled = true;
+  });
+</script>
+</body>
+</html>

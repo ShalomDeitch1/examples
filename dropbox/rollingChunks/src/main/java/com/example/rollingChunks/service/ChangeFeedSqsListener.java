@@ -3,6 +3,7 @@ package com.example.rollingChunks.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import io.awspring.cloud.sqs.annotation.SqsListener;
@@ -12,6 +13,7 @@ import io.awspring.cloud.sqs.annotation.SqsListener;
  * The durable source of truth is still the DB change feed (see /api/changes).
  */
 @Component
+@ConditionalOnProperty(name = "app.change-feed.notify.sqs-listener.enabled", havingValue = "true", matchIfMissing = false)
 public class ChangeFeedSqsListener {
 
     private static final Logger log = LoggerFactory.getLogger(ChangeFeedSqsListener.class);

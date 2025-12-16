@@ -51,6 +51,9 @@ class ChunkServiceTest {
         registry.add("aws.s3.bucket", () -> "dropbox-stage3-test");
         registry.add("app.chunk.object-prefix", () -> "chunks/sha256/");
         registry.add("app.presign.ttl-seconds", () -> 600);
+
+        // Prevent awspring SQS listener containers from starting in tests.
+        registry.add("app.s3.notifications.sqs.enabled", () -> false);
     }
 
     @Autowired

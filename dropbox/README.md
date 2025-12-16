@@ -9,8 +9,30 @@ This repo is split into modules that correspond to the stages below:
 
 - Stage 1: [simplestVersion](simplestVersion/) (naive server-proxied upload)
 - Stage 2: [directS3](directS3/) (presigned direct-to-S3 upload + SNS/SQS notifications)
- Stage 3: [chunkS3](chunkS3/) (client-side chunking + content-addressed chunks + retryable completion)
- Stage 4: [rollingChunks](rollingChunks/) (rolling/content-defined chunking + durable DB change feed + SNS/SQS notify example)
+- Stage 3: [chunkS3](chunkS3/) (client-side chunking + content-addressed chunks + retryable completion)
+- Stage 4: [rollingChunks](rollingChunks/) (rolling/content-defined chunking + durable DB change feed + SNS/SQS notify example)
+
+Reference implementation (not a “stage”):
+
+- Option A: [multipartUpload](multipartUpload/) (direct multipart upload: browser -> S3 via presigned UploadPart URLs)
+
+## Option A vs Option B (when to use which)
+
+This repo shows two common approaches for uploading/syncing large files:
+
+- **Option A — Direct multipart upload (browser -> S3)**
+    - Best when you just need to upload/download large blobs efficiently.
+    - Server coordinates `CreateMultipartUpload` / `CompleteMultipartUpload`, client uploads parts via presigned URLs.
+    - Production needs: part size constraints (S3: >= 5 MiB except last), retry logic, and cleanup of abandoned uploads.
+- **Option B — Chunk-store + manifest (dedup + sync-friendly)**
+    - Best when you care about deduplication, resumability, and “small edit -> small upload” behavior.
+    - Client sends a manifest of content-addressed chunks; server returns presigned URLs for missing chunks only.
+    - Storing chunks as separate S3 objects avoids multipart part-size constraints, but introduces more objects/metadata.
+
+In this repo:
+
+- Option A is demonstrated in [multipartUpload](multipartUpload/).
+- Option B is Stage 3 ([chunkS3](chunkS3/)) and Stage 4 ([rollingChunks](rollingChunks/)).
 ## functional requirements
 1. can store file
 2. can retrieve files

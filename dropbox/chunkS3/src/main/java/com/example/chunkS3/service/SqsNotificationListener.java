@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -13,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.awspring.cloud.sqs.annotation.SqsListener;
 
 @Component
+@ConditionalOnProperty(name = "app.s3.notifications.sqs.enabled", havingValue = "true", matchIfMissing = true)
 public class SqsNotificationListener {
 
     private static final Logger log = LoggerFactory.getLogger(SqsNotificationListener.class);

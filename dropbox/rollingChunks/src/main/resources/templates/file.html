@@ -90,13 +90,13 @@
     return contentType && contentType.startsWith('text/');
   }
 
-  // Rolling/content-defined chunking parameters.
-  // In LocalStack we intentionally keep these tiny so you can observe the upload behavior.
-  // If you implement chunk boundaries as S3 multipart-upload PART sizes in real AWS, the allowed range is:
-  //   min 5 MiB (except last), max 5 GiB, and max 10,000 parts per object.
-  const TEXT_ROLLING_MIN_BYTES = 64;
-  const TEXT_ROLLING_AVG_BYTES = 256; // must be a power-of-two for the simple cut-mask below
-  const TEXT_ROLLING_MAX_BYTES = 1024;
+  async function getChunkingConfig() {
+    if (window.__chunkingConfig) return window.__chunkingConfig;
+    const resp = await fetch('/api/config/chunking');
+    if (!resp.ok) throw new Error('Failed to load chunking config');
+    window.__chunkingConfig = await resp.json();
+    return window.__chunkingConfig;
+  }
 
   // A small "gear" table for a fast rolling hash. (Deterministic constants.)
   const GEAR = (() => {
@@ -159,7 +159,8 @@
     const enc = new TextEncoder();
     const bytes = enc.encode(normalized);
 
-    const cuts = rollingChunkBoundaries(bytes, TEXT_ROLLING_MIN_BYTES, TEXT_ROLLING_AVG_BYTES, TEXT_ROLLING_MAX_BYTES);
+    const cfg = await getChunkingConfig();
+    const cuts = rollingChunkBoundaries(bytes, cfg.rollingMinChunkBytes, cfg.rollingAvgChunkBytes, cfg.rollingMaxChunkBytes);
     const parts = [];
     let idx = 0;
     for (let i = 0; i < cuts.length - 1; i++) {
@@ -179,14 +180,14 @@
     };
   }
 
-  const BINARY_CHUNK_SIZE = 256 * 1024;
-
   async function chunkBinaryFixed256KiB(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
+    const cfg = await getChunkingConfig();
+    const chunkSize = Number(cfg.binaryChunkSizeBytes);
     const parts = [];
     let idx = 0;
-    for (let offset = 0; offset < bytes.length; offset += BINARY_CHUNK_SIZE) {
-      const slice = bytes.slice(offset, Math.min(offset + BINARY_CHUNK_SIZE, bytes.length));
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      const slice = bytes.slice(offset, Math.min(offset + chunkSize, bytes.length));
       const hash = await sha256Hex(slice);
       parts.push({ index: idx++, hash, lengthBytes: slice.byteLength, bytes: slice });
     }
@@ -593,6 +594,8 @@
   });
 
   refreshMeta();
+  // Warm config cache
+  getChunkingConfig().catch(() => {});
 </script>
 </body>
 </html>
