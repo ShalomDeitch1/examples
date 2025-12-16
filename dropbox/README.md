@@ -244,7 +244,7 @@ What’s implemented in [chunkS3](chunkS3/):
 
 *   Text files: normalize CRLF → LF and chunk **by line** (`TEXT_LINES_NORMALIZED_LF`) so editing one line only re-uploads one “chunk”.
     - This is intentionally **not** standard Dropbox-style CDC; it’s a simple educational strategy.
-*   Non-text/binary: split into **fixed 256 KiB** chunks (`FIXED_256_KIB`).
+*   Non-text/binary: split into fixed-size chunks (configurable via `app.chunk.binary.size-bytes`); demos use small sizes (e.g., 64 bytes) for visibility, while production may use larger sizes such as 5 MiB, the AWS minimum for S3 multipart part-size constraints as an example).
 *   Rolling / content-defined chunking is covered in Stage 4.
 
 ### Design

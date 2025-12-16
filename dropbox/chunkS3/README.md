@@ -12,8 +12,8 @@ It’s designed to build on the Stage 2 “direct-to-S3 via presigned URLs” id
 ## Key constraints (intentional)
 
 - Text files: normalize CRLF → LF before hashing/chunking.
-- Non-text/binary: chunk into fixed 64-byte pieces (so the flow is easy to observe).
-- Manifest stores per-chunk `lengthBytes`.
+- Non-text/binary: split into fixed-size chunks (configured via `app.chunk.binary.size-bytes` — demos use 64 bytes for visibility; production would choose larger sizes such as 5 MiB, the AWS minimum for S3).
+- Manifest stores per-chunk `lengthBytes`. 
 
 ## Data model
 

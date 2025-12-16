@@ -14,7 +14,7 @@ S3/SNS/SQS are still used, but with a different split of responsibilities:
 ## Chunking strategies
 
 - Text: normalize CRLF -> LF, then chunk with a rolling/content-defined chunker: `ROLLING_TEXT_NORMALIZED_LF`.
-- Non-text/binary: fixed-size chunks (still small for demos): `FIXED_256_KIB`.
+- Non-text/binary: split into fixed-size chunks (configured via `app.chunk.binary.size-bytes`; demos use small sizes such as 64 bytes for visibility; production may prefer larger chunk sizes or follow S3 5 Mib the AWS minimum for S3 multipart part-size constraints).
 
 Local demo sizing vs AWS multipart constraints:
 
