@@ -184,7 +184,7 @@ sequenceDiagram
 
 Important note about demo vs production chunk sizes
 
-- The demo modules expose a property `app.chunk.binary.size-bytes` to control the binary chunk size. For local demos we intentionally use small sizes (e.g., 64 bytes) so the behavior is easy to observe. In production choose larger sizes (for example 256 KiB or larger) and be mindful of S3 multipart constraints if adapting this model to multipart parts.
+- The demo modules expose a property `app.chunk.binary.size-bytes` to control the binary chunk size. For local demos we intentionally use small sizes (e.g., 64 bytes) so the behavior is easy to observe. In production S3 multipart constraints requires a minimum of 5 MiB chunk size (except for the last chunk).
 
 **Stage 4 — rollingChunks (Rolling/content-defined chunking + durable DB change feed)**
 
