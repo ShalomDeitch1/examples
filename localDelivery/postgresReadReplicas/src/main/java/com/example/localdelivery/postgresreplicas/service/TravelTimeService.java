@@ -1,5 +1,6 @@
-package com.example.localdelivery.postgresreplicas;
+package com.example.localdelivery.postgresreplicas.service;
 
+import com.example.localdelivery.postgresreplicas.util.GeoUtils;
 import org.springframework.stereotype.Service;
 
 @Service

@@ -1,4 +1,4 @@
-package com.example.localdelivery.postgresreplicas;
+package com.example.localdelivery.postgresreplicas.config;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Qualifier;

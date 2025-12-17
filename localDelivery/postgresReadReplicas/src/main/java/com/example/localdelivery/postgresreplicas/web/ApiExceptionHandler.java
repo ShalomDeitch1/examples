@@ -1,4 +1,4 @@
-package com.example.localdelivery.postgresreplicas;
+package com.example.localdelivery.postgresreplicas.web;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

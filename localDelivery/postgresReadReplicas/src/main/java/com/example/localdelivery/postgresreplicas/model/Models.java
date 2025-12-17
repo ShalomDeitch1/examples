@@ -1,4 +1,4 @@
-package com.example.localdelivery.postgresreplicas;
+package com.example.localdelivery.postgresreplicas.model;
 
 import java.time.Instant;
 import java.util.UUID;

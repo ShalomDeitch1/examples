@@ -1,5 +1,7 @@
-package com.example.localdelivery.postgresreplicas;
+package com.example.localdelivery.postgresreplicas.controller;
 
+import com.example.localdelivery.postgresreplicas.model.Models;
+import com.example.localdelivery.postgresreplicas.service.DeliverableItemsService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;

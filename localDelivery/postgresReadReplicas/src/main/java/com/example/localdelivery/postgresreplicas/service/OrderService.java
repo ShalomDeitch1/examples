@@ -1,5 +1,8 @@
-package com.example.localdelivery.postgresreplicas;
+package com.example.localdelivery.postgresreplicas.service;
 
+import com.example.localdelivery.postgresreplicas.dao.ReadDao;
+import com.example.localdelivery.postgresreplicas.dao.WriteDao;
+import com.example.localdelivery.postgresreplicas.model.Models;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;

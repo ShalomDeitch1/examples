@@ -1,4 +1,4 @@
-package com.example.localdelivery.postgresreplicas;
+package com.example.localdelivery.postgresreplicas.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

@@ -1,4 +1,4 @@
-package com.example.localdelivery.postgresreplicas;
+package com.example.localdelivery.postgresreplicas.util;
 
 public class GeoUtils {
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
