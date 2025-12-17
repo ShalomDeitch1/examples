@@ -79,19 +79,37 @@ curl "http://localhost:8093/items?lat=40.7128&lon=-74.0060"
     "itemId": "item1",
     "name": "Milk",
     "warehouseId": "wh1",
-    "travelTimeSeconds": 120
+    "travelTimeSeconds": 0
   },
   {
     "itemId": "item2",
     "name": "Bread",
     "warehouseId": "wh1",
-    "travelTimeSeconds": 120
+    "travelTimeSeconds": 0
   },
   {
     "itemId": "item3",
     "name": "Eggs",
     "warehouseId": "wh1",
-    "travelTimeSeconds": 120
+    "travelTimeSeconds": 0
+  },
+  {
+    "itemId": "item4",
+    "name": "Cheese",
+    "warehouseId": "wh2",
+    "travelTimeSeconds": 533
+  },
+  {
+    "itemId": "item5",
+    "name": "Butter",
+    "warehouseId": "wh2",
+    "travelTimeSeconds": 533
+  },
+  {
+    "itemId": "item6",
+    "name": "Yogurt",
+    "warehouseId": "wh3",
+    "travelTimeSeconds": 649
   }
 ]
 ```

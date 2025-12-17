@@ -123,7 +123,7 @@ GET /items?lat=40.7128&lon=-74.0060
 
 #### Step 1: Start Infrastructure
 ```bash
-cd c:\projects\learn\examples.worktrees\worktree-2025-12-17T10-37-00\localDelivery\cachingWithRedisGeo
+cd <path>\localDelivery\cachingWithRedisGeo
 docker compose up -d
 ```
 
