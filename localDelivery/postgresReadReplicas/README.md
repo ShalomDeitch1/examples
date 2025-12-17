@@ -40,18 +40,27 @@ Run the sample app:
 mvn spring-boot:run
 ```
 
+To run in debug mode
+```bash
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+```
+and then attach the debugger using
+cntr-shif-p
+jdb -attach 5005
+select "Debug attach to Node process"
+
 Quick smoke tests (after the app is running)
 
 - List deliverable items for a location (lat/lon):
 
 ```bash
-curl -sS "http://localhost:8080/items?lat=40.7128&lon=-74.0060" | jq .
+curl -sS "http://localhost:8094/items?lat=40.7128&lon=-74.0060" | jq .
 ```
 
 - Place an order (example):
 
 ```bash
-curl -sS -X POST http://localhost:8080/orders \
+curl -sS -X POST http://localhost:8094/orders \
   -H 'Content-Type: application/json' \
   -d '{ "customerId":"<customer-uuid>", "lines":[{ "itemId":"<item-uuid>", "quantity":1 }] }' | jq .
 ```
@@ -59,7 +68,7 @@ curl -sS -X POST http://localhost:8080/orders \
 - Confirm payment:
 
 ```bash
-curl -sS -X POST http://localhost:8080/orders/<order-uuid>/confirm-payment \
+curl -sS -X POST http://localhost:8094/orders/<order-uuid>/confirm-payment \
   -H 'Content-Type: application/json' \
   -d '{ "success": true }' | jq .
 ```
