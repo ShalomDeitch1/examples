@@ -12,13 +12,15 @@ Focus:
 ```mermaid
 graph LR
   Client[Client] --> API[Spring Boot API]
-  API --> DB[(PostgreSQL + PostGIS)]
 
-  subgraph DB[(PostgreSQL + PostGIS)]
+  subgraph DB [PostgreSQL + PostGIS]
+    DBNode[(PostgreSQL + PostGIS)]
     Warehouses[(warehouses)]
     Index[(GiST / SP-GiST index on geography)]
     GridIndex[(Optional: grid/geohash prefix column + btree index)]
   end
+
+  API --> DBNode
 ```
 
 ## What this is demonstrating

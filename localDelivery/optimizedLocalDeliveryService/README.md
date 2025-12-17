@@ -19,12 +19,12 @@ graph TB
   Client --> OrdersAPI[Orders API]
 
   ItemsAPI --> Grid[Grid mapper 1km x 1km]
-  ItemsAPI --> Cache[(Redis cache<br/>items:grid:{id}<br/>TTL 15m)]
+  ItemsAPI --> Cache[("Redis cache\nitems:grid:{id}\nTTL 15m")]
   Cache -- hit --> ItemsAPI
   Cache -- miss --> Warehouses[Relevant warehouses query]
   Warehouses --> Geo[(PostGIS or Redis GEO)]
   ItemsAPI --> Travel[Mock travel time]
-  ItemsAPI --> ReadDB[(Read replica(s))]
+  ItemsAPI --> ReadDB[("Read replica(s)")]
   ItemsAPI --> Cache
 
   OrdersAPI --> Primary[(Postgres primary)]

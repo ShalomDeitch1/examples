@@ -11,8 +11,8 @@ Goal:
 ```mermaid
 graph TB
   Client[Client] --> LB[Load Balancer]
-  LB --> ReadAPI[Read API (list items)]
-  LB --> WriteAPI[Write API (place order)]
+  LB --> ReadAPI["Read API (list items)"]
+  LB --> WriteAPI["Write API (place order)"]
 
   WriteAPI --> Primary[(Postgres Primary)]
   Primary -->|Streaming replication| Replica1[(Read Replica 1)]
