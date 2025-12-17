@@ -47,6 +47,32 @@ Run the app:
 mvn spring-boot:run
 ```
 
+Quick smoke tests (after the app is running)
+
+- Get items for a grid/location (uses cache + replica reads):
+
+```bash
+curl -sS "http://localhost:8080/items?lat=40.7128&lon=-74.0060" | jq .
+```
+
+- Place an order (this writes to primary and bumps cache version):
+
+```bash
+curl -sS -X POST http://localhost:8080/orders \
+  -H 'Content-Type: application/json' \
+  -d '{ "customerId":"<customer-uuid>", "lines":[{ "itemId":"<item-uuid>", "quantity":1 }] }' | jq .
+```
+
+- Confirm payment for an order:
+
+```bash
+curl -sS -X POST http://localhost:8080/orders/<order-uuid>/confirm-payment \
+  -H 'Content-Type: application/json' \
+  -d '{ "success": true }' | jq .
+```
+
+Expect the cache to be bumped on order placement/confirmation to avoid stale reads.
+
 ## Trade-offs / Notes
 
 - Adds operational complexity (Redis + replica topology).

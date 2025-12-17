@@ -40,6 +40,32 @@ Run the sample app:
 mvn spring-boot:run
 ```
 
+Quick smoke tests (after the app is running)
+
+- List deliverable items for a location (lat/lon):
+
+```bash
+curl -sS "http://localhost:8080/items?lat=40.7128&lon=-74.0060" | jq .
+```
+
+- Place an order (example):
+
+```bash
+curl -sS -X POST http://localhost:8080/orders \
+  -H 'Content-Type: application/json' \
+  -d '{ "customerId":"<customer-uuid>", "lines":[{ "itemId":"<item-uuid>", "quantity":1 }] }' | jq .
+```
+
+- Confirm payment:
+
+```bash
+curl -sS -X POST http://localhost:8080/orders/<order-uuid>/confirm-payment \
+  -H 'Content-Type: application/json' \
+  -d '{ "success": true }' | jq .
+```
+
+Note: replica reads are used for `GET /items` by default; expect possible eventual consistency after writes.
+
 ## Trade-offs / Notes
 
 - Replication is eventually consistent (replica lag).

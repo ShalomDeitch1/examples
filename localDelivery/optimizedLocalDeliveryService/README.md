@@ -51,6 +51,34 @@ Run the app:
 mvn spring-boot:run
 ```
 
+Quick smoke tests (after the app is running)
+
+- Get deliverable items for a grid/location (cache + geo):
+
+```bash
+curl -sS "http://localhost:8080/items?lat=40.7128&lon=-74.0060" | jq .
+```
+
+- Place an order (writes to primary, bumps version):
+
+```bash
+curl -sS -X POST http://localhost:8080/orders \
+  -H 'Content-Type: application/json' \
+  -d '{ "customerId":"<customer-uuid>", "lines":[{ "itemId":"<item-uuid>", "quantity":1 }] }' | jq .
+```
+
+- Confirm payment for an order:
+
+```bash
+curl -sS -X POST http://localhost:8080/orders/<order-uuid>/confirm-payment \
+  -H 'Content-Type: application/json' \
+  -d '{ "success": true }' | jq .
+```
+
+Notes:
+- Cache TTL: 15 minutes for `items:grid:{id}:v{ver}` keys.
+- Warehouses are indexed into Redis GEO at startup by `WarehouseGeoIndexer`.
+
 ## Trade-offs / Notes
 
 - Optimizes for the read SLA using cache + precomputation.

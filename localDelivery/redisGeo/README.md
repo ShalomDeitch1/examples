@@ -35,6 +35,28 @@ Run the app:
 mvn spring-boot:run
 ```
 
+Quick smoke tests (after the app is running)
+
+- List all warehouses:
+
+```bash
+curl -sS http://localhost:8080/warehouses | jq .
+```
+
+- Find nearby warehouses (radius in meters):
+
+```bash
+curl -sS "http://localhost:8080/warehouses/nearby?lat=40.7128&lon=-74.0060&radiusMeters=5000" | jq .
+```
+
+- Find nearest warehouses (limit):
+
+```bash
+curl -sS "http://localhost:8080/warehouses/nearest?lat=40.7128&lon=-74.0060&limit=3" | jq .
+```
+
+Adjust `lat`/`lon` as needed.
+
 ## Trade-offs / Notes
 
 - Redis GEO queries are fast and easy to operationalize.
