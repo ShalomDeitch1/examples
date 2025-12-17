@@ -50,4 +50,4 @@ mvn spring-boot:run
 
 ## Task list
 
-See `plan/TASKS.md`.
+See [plan/TASKS.md](./plan/TASKS.md).

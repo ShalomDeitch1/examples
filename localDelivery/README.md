@@ -11,25 +11,25 @@ The examples intentionally evolve from “get it working” to “optimize the r
 
 ## Subprojects
 
-1. `postgresGeo`
+1. [postgresGeo](./postgresGeo)
    - Basic geospatial queries using PostgreSQL + PostGIS (warehouse relevance queries)
 
-2. `redisGeo`
+2. [redisGeo](./redisGeo)
    - Basic geospatial queries using Redis GEO commands (warehouse proximity)
 
-3. `cachingWithRedisGeo`
+3. [cachingWithRedisGeo](./cachingWithRedisGeo)
    - Cache “deliverable items per location-grid” with Redis TTL to hit the 100ms read goal
 
-4. `postgresReadReplicas`
+4. [postgresReadReplicas](./postgresReadReplicas)
    - Read replicas via PostgreSQL streaming replication for read-heavy endpoints
 
-5. `cacheWithReadReplicas`
+5. [cacheWithReadReplicas](./cacheWithReadReplicas)
    - Combine Redis caching + read replicas, plus cache versioning to reduce stale reads
 
-6. `simpleLocalDeliveryService`
+6. [simpleLocalDeliveryService](./simpleLocalDeliveryService)
    - A simple working service (no geo/caching optimizations yet)
 
-7. `optimizedLocalDeliveryService`
+7. [optimizedLocalDeliveryService](./optimizedLocalDeliveryService)
    - Optimized version combining grids + Redis cache + (optional) Redis GEO + read replicas
 
 Each subproject has its own `README.md` (concept explanation, architecture diagram, and run instructions) plus a task list under `plan/`.

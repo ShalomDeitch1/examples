@@ -19,7 +19,7 @@
 - Keep warehouse count small for demo, but code should be structured for scale
 
 ## Data sources
-- Separate read vs write data access layers (optional):
+- Separate read vs write data access layers:
   - reads -> replica datasource
   - writes -> primary datasource
 

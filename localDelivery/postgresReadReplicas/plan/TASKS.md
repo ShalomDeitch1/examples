@@ -20,4 +20,4 @@
 
 ## Tests
 - Unit tests for routing logic
-- Optional: integration tests (may be heavy) that assert reads go to replica datasource
+- integration tests (may be heavy) that assert reads go to replica datasource

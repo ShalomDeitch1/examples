@@ -16,10 +16,12 @@
 ## API endpoints
 - `GET /warehouses/nearby?lat=..&lon=..&radiusMeters=..`
 - `GET /warehouses/nearest?lat=..&lon=..&limit=..`
+- 'Get /warehouses'
+
 
 ## Tests
 - Integration test using Testcontainers Redis
 - Verify response ordering and radius filtering
 
 ## Documentation
-- Add Redis CLI examples to README
+- Add example curl commands and sample responses in README

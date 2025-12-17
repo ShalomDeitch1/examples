@@ -6,8 +6,8 @@ Target behaviors:
 - `GET /items` aims for ~100ms by using:
   - 1km x 1km **grid clustering** for location-based keys
   - Redis caching for “deliverable items per grid” (TTL 15 minutes)
-  - (Optional) Redis GEO / PostGIS to find relevant warehouses quickly
-  - (Optional) Postgres read replicas for scaling reads
+  - Redis GEO / PostGIS to find relevant warehouses quickly
+  - Postgres read replicas for scaling reads
 
 - `POST /orders` aims for ~2s and stays consistent by using primary DB transactions for inventory reservations.
 
@@ -59,4 +59,4 @@ mvn spring-boot:run
 
 ## Task list
 
-See `plan/TASKS.md`.
+See [plan/TASKS.md](./plan/TASKS.md).
