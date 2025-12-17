@@ -1,11 +1,21 @@
 server:
   port: 8094
 
-spring:
+app:
   datasource:
-    url: jdbc:postgresql://localhost:5440/local_delivery
-    username: local
-    password: local
+    primary:
+      url: jdbc:postgresql://localhost:5440/local_delivery
+      username: local
+      password: local
+    # For the demo, replica can default to the primary.
+    replica:
+      url: jdbc:postgresql://localhost:5440/local_delivery
+      username: local
+      password: local
+
+spring:
+  flyway:
+    enabled: true
   jpa:
     hibernate:
       ddl-auto: none

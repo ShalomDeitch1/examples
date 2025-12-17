@@ -6,9 +6,16 @@ spring:
     redis:
       host: localhost
       port: 6379
-  datasource:
-    url: jdbc:postgresql://localhost:5470/local_delivery
-    username: local
-    password: local
   flyway:
     enabled: true
+
+app:
+  datasource:
+    primary:
+      url: jdbc:postgresql://localhost:5470/local_delivery
+      username: local
+      password: local
+    replica:
+      url: jdbc:postgresql://localhost:5470/local_delivery
+      username: local
+      password: local
