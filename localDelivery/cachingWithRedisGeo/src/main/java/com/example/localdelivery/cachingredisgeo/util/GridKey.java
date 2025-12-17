@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachingredisgeo;
+package com.example.localdelivery.cachingredisgeo.util;
 
 public class GridKey {
     private static final int GRID_SIZE_METERS = 1000; // 1km grid

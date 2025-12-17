@@ -1,5 +1,6 @@
-package com.example.localdelivery.cachingredisgeo;
+package com.example.localdelivery.cachingredisgeo.repository;
 
+import com.example.localdelivery.cachingredisgeo.model.Warehouse;
 import org.springframework.data.redis.core.GeoOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.connection.RedisGeoCommands;

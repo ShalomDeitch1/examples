@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachingredisgeo;
+package com.example.localdelivery.cachingredisgeo.service;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -7,6 +7,12 @@ import java.util.Set;
 
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+
+import com.example.localdelivery.cachingredisgeo.model.DeliverableItem;
+import com.example.localdelivery.cachingredisgeo.model.InventoryItem;
+import com.example.localdelivery.cachingredisgeo.model.Warehouse;
+import com.example.localdelivery.cachingredisgeo.repository.InventoryRepository;
+import com.example.localdelivery.cachingredisgeo.repository.WarehouseRepository;
 
 @Service
 public class DeliverableItemsService {
@@ -18,7 +24,6 @@ public class DeliverableItemsService {
     private final WarehouseRepository warehouseRepository;
     private final InventoryRepository inventoryRepository;
     private final TravelTimeService travelTimeService;
-    
 
     public DeliverableItemsService(
             WarehouseRepository warehouseRepository,
@@ -29,7 +34,7 @@ public class DeliverableItemsService {
         this.travelTimeService = travelTimeService;
     }
 
-    @Cacheable(value = "deliverable-items", key = "'deliverable-items:grid:' + T(com.example.localdelivery.cachingredisgeo.GridKey).compute(#latitude,#longitude)")
+    @Cacheable(value = "deliverable-items", key = "'deliverable-items:grid:' + T(com.example.localdelivery.cachingredisgeo.util.GridKey).compute(#latitude,#longitude)")
     public List<DeliverableItem> getDeliverableItems(double latitude, double longitude) {
         return computeDeliverableItems(latitude, longitude);
     }

@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachingredisgeo;
+package com.example.localdelivery.cachingredisgeo.util;
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;

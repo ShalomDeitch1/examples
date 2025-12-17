@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachingredisgeo;
+package com.example.localdelivery.cachingredisgeo.config;
 
 import java.time.Duration;
 import java.util.HashMap;

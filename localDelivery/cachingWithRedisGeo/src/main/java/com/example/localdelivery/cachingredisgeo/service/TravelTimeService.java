@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachingredisgeo;
+package com.example.localdelivery.cachingredisgeo.service;
 
 import org.springframework.stereotype.Service;
 

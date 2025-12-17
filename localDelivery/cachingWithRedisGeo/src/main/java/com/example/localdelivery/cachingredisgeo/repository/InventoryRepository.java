@@ -1,5 +1,6 @@
-package com.example.localdelivery.cachingredisgeo;
+package com.example.localdelivery.cachingredisgeo.repository;
 
+import com.example.localdelivery.cachingredisgeo.model.InventoryItem;
 import org.springframework.stereotype.Repository;
 import jakarta.annotation.PostConstruct;
 import java.util.*;
