@@ -138,18 +138,6 @@ Expected response (Far away - `lat=34.0522&lon=-118.2437`):
 ```
 ```
 
-- Expected API output (current behavior):
-```json
-[
-  { "itemId": "item1", "name": "Milk",  "warehouseId": "wh1", "travelTimeSeconds": 0 },
-  { "itemId": "item2", "name": "Bread", "warehouseId": "wh1", "travelTimeSeconds": 0 },
-  { "itemId": "item3", "name": "Eggs",  "warehouseId": "wh1", "travelTimeSeconds": 0 },
-  { "itemId": "item4", "name": "Cheese", "warehouseId": "wh2", "travelTimeSeconds": 533 },
-  { "itemId": "item5", "name": "Butter", "warehouseId": "wh2", "travelTimeSeconds": 533 },
-  { "itemId": "item6", "name": "Yogurt", "warehouseId": "wh3", "travelTimeSeconds": 649 }
-]
-```
-
 - Unit test: a `GridKey` JUnit test is available at `src/test/java/com/example/localdelivery/cachingredisgeo/GridKeyTest.java`. Run with `mvn test`.
 
 
