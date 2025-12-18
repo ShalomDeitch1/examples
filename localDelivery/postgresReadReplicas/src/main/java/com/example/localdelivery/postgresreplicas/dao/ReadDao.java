@@ -25,7 +25,7 @@ public class ReadDao {
     @Transactional(readOnly = true, transactionManager = "replicaTransactionManager")
     public Optional<Models.Customer> findCustomer(UUID customerId) {
         String sql = "SELECT customer_id, name, latitude, longitude FROM customers WHERE customer_id = :customerId";
-        MapSqlParameterSource params = new MapSqlParameterSource().addValue("customerId", customerId.toString());
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("customerId", customerId);
 
         return replicaNamedJdbc.query(
                 sql,

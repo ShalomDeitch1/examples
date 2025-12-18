@@ -39,5 +39,7 @@ if [ -z "$(ls -A "$PGDATA" 2>/dev/null || true)" ]; then
   echo "Base backup complete. Starting replica postgres"
 fi
 
-# Exec the original postgres entrypoint/command (CMD)
-exec "$@"
+# Exec the original postgres entrypoint/command (CMD) via the image's
+# docker-entrypoint script so the server is started under the
+# unprivileged `postgres` user (prevents "root execution" error).
+exec /usr/local/bin/docker-entrypoint.sh "$@"

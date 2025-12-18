@@ -29,8 +29,8 @@ public class WriteDao {
 
     MapSqlParameterSource params = new MapSqlParameterSource()
         .addValue("qty", qty)
-        .addValue("warehouseId", warehouseId.toString())
-        .addValue("itemId", itemId.toString());
+        .addValue("warehouseId", warehouseId, java.sql.Types.OTHER)
+        .addValue("itemId", itemId, java.sql.Types.OTHER);
 
     int updated = primaryNamedJdbc.update(sql, params);
     return updated == 1;
@@ -43,8 +43,8 @@ public class WriteDao {
 
     MapSqlParameterSource params = new MapSqlParameterSource()
         .addValue("qty", qty)
-        .addValue("warehouseId", warehouseId.toString())
-        .addValue("itemId", itemId.toString());
+        .addValue("warehouseId", warehouseId, java.sql.Types.OTHER)
+        .addValue("itemId", itemId, java.sql.Types.OTHER);
 
     int updated = primaryNamedJdbc.update(sql, params);
     if (updated != 1) {
@@ -59,8 +59,8 @@ public class WriteDao {
 
     MapSqlParameterSource params = new MapSqlParameterSource()
         .addValue("qty", qty)
-        .addValue("warehouseId", warehouseId.toString())
-        .addValue("itemId", itemId.toString());
+        .addValue("warehouseId", warehouseId, java.sql.Types.OTHER)
+        .addValue("itemId", itemId, java.sql.Types.OTHER);
 
     int updated = primaryNamedJdbc.update(sql, params);
     if (updated != 1) {
@@ -72,8 +72,8 @@ public class WriteDao {
     public void insertOrder(Models.Order order) {
     String sql = "INSERT INTO orders(order_id, customer_id, status, created_at) VALUES(:orderId, :customerId, :status, :createdAt)";
     MapSqlParameterSource params = new MapSqlParameterSource()
-        .addValue("orderId", order.id().toString())
-        .addValue("customerId", order.customerId().toString())
+        .addValue("orderId", order.id(), java.sql.Types.OTHER)
+        .addValue("customerId", order.customerId(), java.sql.Types.OTHER)
         .addValue("status", order.status().name())
         .addValue("createdAt", java.sql.Timestamp.from(order.createdAt()));
 
@@ -84,9 +84,9 @@ public class WriteDao {
     public void insertOrderLine(Models.OrderLine line) {
     String sql = "INSERT INTO order_lines(order_id, item_id, warehouse_id, qty) VALUES(:orderId, :itemId, :warehouseId, :qty)";
     MapSqlParameterSource params = new MapSqlParameterSource()
-        .addValue("orderId", line.orderId().toString())
-        .addValue("itemId", line.itemId().toString())
-        .addValue("warehouseId", line.warehouseId().toString())
+        .addValue("orderId", line.orderId(), java.sql.Types.OTHER)
+        .addValue("itemId", line.itemId(), java.sql.Types.OTHER)
+        .addValue("warehouseId", line.warehouseId(), java.sql.Types.OTHER)
         .addValue("qty", line.qty());
 
     primaryNamedJdbc.update(sql, params);
@@ -95,7 +95,7 @@ public class WriteDao {
     @Transactional(readOnly = true, transactionManager = "primaryTransactionManager")
     public Optional<Models.Order> findOrder(UUID orderId) {
     String sql = "SELECT order_id, customer_id, status, created_at FROM orders WHERE order_id = :orderId";
-    MapSqlParameterSource params = new MapSqlParameterSource().addValue("orderId", orderId.toString());
+    MapSqlParameterSource params = new MapSqlParameterSource().addValue("orderId", orderId, java.sql.Types.OTHER);
 
     return primaryNamedJdbc.query(
         sql,
@@ -112,7 +112,7 @@ public class WriteDao {
     @Transactional(readOnly = true, transactionManager = "primaryTransactionManager")
     public List<Models.OrderLine> findLines(UUID orderId) {
     String sql = "SELECT order_id, item_id, warehouse_id, qty FROM order_lines WHERE order_id = :orderId";
-    MapSqlParameterSource params = new MapSqlParameterSource().addValue("orderId", orderId.toString());
+    MapSqlParameterSource params = new MapSqlParameterSource().addValue("orderId", orderId, java.sql.Types.OTHER);
 
     return primaryNamedJdbc.query(
         sql,
@@ -131,7 +131,7 @@ public class WriteDao {
     String sql = "UPDATE orders SET status = :status WHERE order_id = :orderId";
     MapSqlParameterSource params = new MapSqlParameterSource()
         .addValue("status", status.name())
-        .addValue("orderId", orderId.toString());
+        .addValue("orderId", orderId, java.sql.Types.OTHER);
 
     primaryNamedJdbc.update(sql, params);
     }
