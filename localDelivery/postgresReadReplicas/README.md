@@ -223,7 +223,7 @@ mvn -f localDelivery/postgresReadReplicas/pom.xml spring-boot:run &
 ```bash
 ORDER_ID=$(curl -sS -X POST http://localhost:8094/orders \
   -H 'Content-Type: application/json' \
-  -d '{ "customerId":"20000000-0000-0000-0000-000000000001", "lines":[{ "itemId":"10000000-0000-0000-0000-000000000003", "qty":1 }] }' | jq -r '.orderId')
+  -d '{ "customerId":"20000000-0000-0000-0000-000000000001", "lines":[{ "itemId":"10000000-0000-0000-0000-000000000003", "qty":1 }] }' | jq -r '.orderId') && \
 echo "created order $ORDER_ID"
 ```
 
@@ -236,7 +236,7 @@ curl -sS http://localhost:8094/debug/lsn | jq
 4. Poll until `lag_bytes` reaches zero (replica caught up):
 
 ```bash
-while [ "$(curl -sS http://localhost:8094/debug/lsn | jq -r .lag_bytes)" -ne 0 ]; do
+while [ "$(curl -sS http://localhost:8094/debug/lsn | jq -r '.lag_bytes // 0')" -ne 0 ]; do
   curl -sS http://localhost:8094/debug/lsn | jq
   sleep 1
 done
