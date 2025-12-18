@@ -1,6 +1,11 @@
-package com.example.localdelivery.simple;
+package com.example.localdelivery.simple.service;
 
 import org.springframework.stereotype.Service;
+
+import com.example.localdelivery.simple.model.DeliverableItem;
+import com.example.localdelivery.simple.model.Warehouse;
+import com.example.localdelivery.simple.repositories.InventoryRepository;
+import com.example.localdelivery.simple.repositories.WarehouseRepository;
 
 import java.util.ArrayList;
 import java.util.HashMap;

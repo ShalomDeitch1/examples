@@ -1,4 +1,4 @@
-package com.example.localdelivery.simple;
+package com.example.localdelivery.simple.repositories;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;

@@ -1,10 +1,12 @@
-package com.example.localdelivery.simple;
+package com.example.localdelivery.simple.repositories;
 
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+
+import com.example.localdelivery.simple.model.Customer;
 
 @Repository
 public class CustomerRepository {

@@ -1,4 +1,4 @@
-package com.example.localdelivery.simple;
+package com.example.localdelivery.simple.model;
 
 import java.time.Instant;
 import java.util.List;

@@ -1,4 +1,4 @@
-package com.example.localdelivery.simple;
+package com.example.localdelivery.simple.web;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

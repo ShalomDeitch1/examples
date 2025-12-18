@@ -1,7 +1,11 @@
-package com.example.localdelivery.simple;
+package com.example.localdelivery.simple.repositories;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+
+import com.example.localdelivery.simple.model.Order;
+import com.example.localdelivery.simple.model.OrderLine;
+import com.example.localdelivery.simple.model.OrderStatus;
 
 import java.util.List;
 import java.util.Optional;

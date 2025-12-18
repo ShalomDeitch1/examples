@@ -1,13 +1,27 @@
-package com.example.localdelivery.simple;
+package com.example.localdelivery.simple.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.example.localdelivery.simple.model.CreateOrderRequest;
+import com.example.localdelivery.simple.model.Customer;
+import com.example.localdelivery.simple.model.Order;
+import com.example.localdelivery.simple.model.OrderResponse;
+import com.example.localdelivery.simple.model.OrderStatus;
+import com.example.localdelivery.simple.model.Warehouse;
+import com.example.localdelivery.simple.repositories.CustomerRepository;
+import com.example.localdelivery.simple.repositories.InventoryRepository;
+import com.example.localdelivery.simple.repositories.OrderRepository;
+import com.example.localdelivery.simple.repositories.WarehouseRepository;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+
+import com.example.localdelivery.simple.model.OrderLine;
+import com.example.localdelivery.simple.model.OrderLineRequest;
 
 @Service
 public class OrderService {

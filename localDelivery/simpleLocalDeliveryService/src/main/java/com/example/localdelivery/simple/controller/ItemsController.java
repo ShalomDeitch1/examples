@@ -1,9 +1,14 @@
-package com.example.localdelivery.simple;
+package com.example.localdelivery.simple.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.example.localdelivery.simple.model.Customer;
+import com.example.localdelivery.simple.model.DeliverableItem;
+import com.example.localdelivery.simple.repositories.CustomerRepository;
+import com.example.localdelivery.simple.service.DeliverableItemsService;
 
 import java.util.List;
 import java.util.UUID;

@@ -51,32 +51,42 @@ Quick smoke tests (after the app is running)
 - List deliverable items for a location (lat/lon):
 
 ```bash
-curl -sS "http://localhost:8080/items?lat=40.7128&lon=-74.0060" | jq .
+curl -sS "http://localhost:8096/items?lat=40.7128&lon=-74.0060" | jq .
 ```
 
 - List deliverable items for a customer (customerId):
 
 ```bash
-curl -sS "http://localhost:8080/items?customerId=<customer-uuid>" | jq .
+curl -sS "http://localhost:8096/items?customerId=20000000-0000-0000-0000-000000000001" | jq .
 ```
 
 - Place a simple order (replace UUIDs):
 
 ```bash
-curl -sS -X POST http://localhost:8080/orders \
+curl -sS -X POST http://localhost:8096/orders \
   -H 'Content-Type: application/json' \
-  -d '{ "customerId":"<customer-uuid>", "lines":[{ "itemId":"<item-uuid>", "quantity":1 }] }' | jq .
+  -d '{ "customerId":"20000000-0000-0000-0000-000000000001", "lines":[{ "itemId":"10000000-0000-0000-0000-000000000001", "qty":1 }] }' \
+  -o /dev/stdout | jq .
 ```
-
-- Confirm payment for an order:
+Note: to capture the created order's `orderId` and reuse it in the confirm-payment request, run:
 
 ```bash
-curl -sS -X POST http://localhost:8080/orders/<order-uuid>/confirm-payment \
+# Save the POST response and show it
+resp=$(curl -sS -X POST http://localhost:8096/orders \
+  -H 'Content-Type: application/json' \
+  -d '{ "customerId":"20000000-0000-0000-0000-000000000001", "lines":[{ "itemId":"10000000-0000-0000-0000-000000000001", "qty":1 }] }')
+echo "$resp" | jq .
+
+# Extract orderId into an env var (bash/sh)
+export ORDER_ID=$(echo "$resp" | jq -r '.orderId')
+echo "ORDER_ID=$ORDER_ID"
+
+# Confirm payment using the extracted ORDER_ID
+curl -sS -X POST "http://localhost:8096/orders/${ORDER_ID}/confirm-payment" \
   -H 'Content-Type: application/json' \
   -d '{ "success": true }' | jq .
 ```
 
-Replace `<customer-uuid>`, `<item-uuid>`, and `<order-uuid>` with values from the DB or earlier responses.
 
 ## Trade-offs / Notes
 
