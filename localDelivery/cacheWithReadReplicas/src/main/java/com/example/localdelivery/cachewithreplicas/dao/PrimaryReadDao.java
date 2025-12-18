@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.dao;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -6,35 +6,22 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
+import com.example.localdelivery.cachewithreplicas.model.Models;
+
 @Repository
-public class ReadDao {
+public class PrimaryReadDao {
 
-    private final JdbcTemplate replicaJdbc;
+    private final JdbcTemplate primaryJdbc;
 
-    public ReadDao(@Qualifier("replicaJdbcTemplate") JdbcTemplate replicaJdbc) {
-        this.replicaJdbc = replicaJdbc;
+    public PrimaryReadDao(@Qualifier("primaryJdbcTemplate") JdbcTemplate primaryJdbc) {
+        this.primaryJdbc = primaryJdbc;
     }
 
-    @Transactional(readOnly = true, transactionManager = "replicaTransactionManager")
-    public Optional<Models.Customer> findCustomer(UUID customerId) {
-        return replicaJdbc.query(
-                "SELECT customer_id, name, latitude, longitude FROM customers WHERE customer_id = ?",
-                (rs, rowNum) -> new Models.Customer(
-                        UUID.fromString(rs.getString("customer_id")),
-                        rs.getString("name"),
-                        rs.getDouble("latitude"),
-                        rs.getDouble("longitude")
-                ),
-                customerId
-        ).stream().findFirst();
-    }
-
-    @Transactional(readOnly = true, transactionManager = "replicaTransactionManager")
+    @Transactional(readOnly = true, transactionManager = "primaryTransactionManager")
     public List<Models.Warehouse> findWarehouses() {
-        return replicaJdbc.query(
+        return primaryJdbc.query(
                 "SELECT warehouse_id, name, latitude, longitude FROM warehouses ORDER BY name",
                 (rs, rowNum) -> new Models.Warehouse(
                         UUID.fromString(rs.getString("warehouse_id")),
@@ -45,7 +32,7 @@ public class ReadDao {
         );
     }
 
-    @Transactional(readOnly = true, transactionManager = "replicaTransactionManager")
+    @Transactional(readOnly = true, transactionManager = "primaryTransactionManager")
     public List<Models.InventoryRow> findAvailableInventoryForWarehouses(List<UUID> warehouseIds) {
         if (warehouseIds.isEmpty()) {
             return List.of();
@@ -58,7 +45,7 @@ public class ReadDao {
                         "JOIN items i ON i.item_id = inv.item_id " +
                         "WHERE inv.available_qty > 0 AND inv.warehouse_id IN (" + placeholders + ")";
 
-        return replicaJdbc.query(
+        return primaryJdbc.query(
                 sql,
                 (rs, rowNum) -> new Models.InventoryRow(
                         UUID.fromString(rs.getString("warehouse_id")),

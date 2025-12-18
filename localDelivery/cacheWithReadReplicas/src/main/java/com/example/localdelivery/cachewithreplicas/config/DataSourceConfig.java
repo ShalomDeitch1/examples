@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.config;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Qualifier;

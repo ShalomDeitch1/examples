@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.dao;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -10,6 +10,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.example.localdelivery.cachewithreplicas.model.Models;
 
 @Repository
 public class WriteDao {

@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.service;
 
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;

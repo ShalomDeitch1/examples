@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.model;
 
 import java.time.Instant;
 import java.util.List;

@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.web;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.util;
 
 public class GridKey {
     private static final int GRID_SIZE_METERS = 1000;

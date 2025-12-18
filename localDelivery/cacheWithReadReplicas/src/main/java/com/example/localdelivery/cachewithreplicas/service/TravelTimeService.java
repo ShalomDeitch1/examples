@@ -1,6 +1,8 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.service;
 
 import org.springframework.stereotype.Service;
+
+import com.example.localdelivery.cachewithreplicas.util.GeoUtils;
 
 @Service
 public class TravelTimeService {

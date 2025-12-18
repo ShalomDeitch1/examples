@@ -1,4 +1,4 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.model;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;

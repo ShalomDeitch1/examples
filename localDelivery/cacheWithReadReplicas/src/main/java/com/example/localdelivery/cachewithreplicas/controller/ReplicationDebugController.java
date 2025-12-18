@@ -1,9 +1,11 @@
-package com.example.localdelivery.cachewithreplicas;
+package com.example.localdelivery.cachewithreplicas.controller;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.util.Map;
 
@@ -14,7 +16,8 @@ public class ReplicationDebugController {
     private final JdbcTemplate primaryJdbc;
     private final JdbcTemplate replicaJdbc;
 
-    public ReplicationDebugController(JdbcTemplate primaryJdbcTemplate, JdbcTemplate replicaJdbcTemplate) {
+    public ReplicationDebugController(JdbcTemplate primaryJdbcTemplate,
+                                      JdbcTemplate replicaJdbcTemplate) {
         this.primaryJdbc = primaryJdbcTemplate;
         this.replicaJdbc = replicaJdbcTemplate;
     }
