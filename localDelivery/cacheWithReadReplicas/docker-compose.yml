@@ -1,13 +1,41 @@
 services:
   redis:
     image: redis:7
+    container_name: cwr-redis
     ports:
       - "6379:6379"
   postgres-primary:
     image: postgres:16
+    container_name: cwr-postgres-primary
     environment:
       POSTGRES_DB: local_delivery
       POSTGRES_USER: local
       POSTGRES_PASSWORD: local
+      REPLICATOR_PASSWORD: replicator
+    volumes:
+      - pgdata_primary:/var/lib/postgresql/data
+      - ./docker/postgres/init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh:ro
     ports:
       - "5450:5432"
+
+  postgres-replica:
+    build:
+      context: ./docker/postgres/replica
+    container_name: cwr-postgres-replica
+    environment:
+      POSTGRES_PASSWORD: local
+      REPLICATOR_PASSWORD: replicator
+      PRIMARY_HOST: postgres-primary
+      PRIMARY_PORT: 5432
+      POSTGRES_DB: local_delivery
+      POSTGRES_USER: local
+    volumes:
+      - pgdata_replica:/var/lib/postgresql/data
+    depends_on:
+      - postgres-primary
+    ports:
+      - "5451:5432"
+
+volumes:
+  pgdata_primary:
+  pgdata_replica:

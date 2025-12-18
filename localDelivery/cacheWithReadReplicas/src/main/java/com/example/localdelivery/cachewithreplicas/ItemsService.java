@@ -10,17 +10,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 @Service
 public class ItemsService {
     private static final int MAX_TRAVEL_TIME_SECONDS = 3600;
     private static final long CACHE_TTL_MINUTES = 15;
+    private static final long REPLICA_LAG_GUARD_MILLIS = 3_000;
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
     private final CacheVersionService versionService;
     private final ReadDao readDao;
+    private final PrimaryReadDao primaryReadDao;
     private final TravelTimeService travelTimeService;
 
     public ItemsService(
@@ -28,12 +31,14 @@ public class ItemsService {
             ObjectMapper objectMapper,
             CacheVersionService versionService,
             ReadDao readDao,
+            PrimaryReadDao primaryReadDao,
             TravelTimeService travelTimeService
     ) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.versionService = versionService;
         this.readDao = readDao;
+        this.primaryReadDao = primaryReadDao;
         this.travelTimeService = travelTimeService;
     }
 
@@ -42,7 +47,7 @@ public class ItemsService {
         long version = versionService.getVersion(gridId);
         String cacheKey = versionService.dataKey(gridId, version);
 
-        String cached = redisTemplate.opsForValue().get(cacheKey);
+        String cached = redisTemplate.opsForValue().get(Objects.requireNonNull(cacheKey));
         if (cached != null) {
             try {
                 return objectMapper.readValue(cached, new TypeReference<>() {});
@@ -51,12 +56,12 @@ public class ItemsService {
             }
         }
 
-        List<Models.DeliverableItem> computed = compute(lat, lon);
+        List<Models.DeliverableItem> computed = compute(lat, lon, shouldBypassReplica(gridId));
 
         try {
             redisTemplate.opsForValue().set(
-                    cacheKey,
-                    objectMapper.writeValueAsString(computed),
+                    Objects.requireNonNull(cacheKey),
+                    Objects.requireNonNull(objectMapper.writeValueAsString(computed)),
                     CACHE_TTL_MINUTES,
                     TimeUnit.MINUTES
             );
@@ -67,8 +72,20 @@ public class ItemsService {
         return computed;
     }
 
-    private List<Models.DeliverableItem> compute(double lat, double lon) {
-        List<Models.Warehouse> warehouses = readDao.findWarehouses();
+    private boolean shouldBypassReplica(String gridId) {
+        long lastWriteMs;
+        try {
+            lastWriteMs = versionService.getLastWriteMillis(gridId);
+        } catch (Exception ignored) {
+            return false;
+        }
+        return lastWriteMs > 0 && (System.currentTimeMillis() - lastWriteMs) < REPLICA_LAG_GUARD_MILLIS;
+    }
+
+    private List<Models.DeliverableItem> compute(double lat, double lon, boolean bypassReplica) {
+        List<Models.Warehouse> warehouses = bypassReplica
+                ? primaryReadDao.findWarehouses()
+                : readDao.findWarehouses();
 
         Map<UUID, Integer> travelSecondsByWarehouse = new HashMap<>();
         List<UUID> eligibleWarehouseIds = new ArrayList<>();
@@ -81,7 +98,9 @@ public class ItemsService {
             }
         }
 
-        List<Models.InventoryRow> inventory = readDao.findAvailableInventoryForWarehouses(eligibleWarehouseIds);
+        List<Models.InventoryRow> inventory = bypassReplica
+            ? primaryReadDao.findAvailableInventoryForWarehouses(eligibleWarehouseIds)
+            : readDao.findAvailableInventoryForWarehouses(eligibleWarehouseIds);
 
         Map<UUID, Models.DeliverableItem> best = new HashMap<>();
         for (Models.InventoryRow row : inventory) {
