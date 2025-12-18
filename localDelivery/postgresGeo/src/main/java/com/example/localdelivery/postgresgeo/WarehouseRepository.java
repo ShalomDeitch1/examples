@@ -31,7 +31,7 @@ public class WarehouseRepository {
                 "VALUES(:id, :name, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, :grid)";
 
         MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("id", warehouse.id())
+            .addValue("id", warehouse.id(), java.sql.Types.OTHER)
                 .addValue("name", warehouse.name())
                 .addValue("lon", warehouse.longitude())
                 .addValue("lat", warehouse.latitude())
