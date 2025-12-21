@@ -2,6 +2,10 @@ package com.example.localdelivery.cachewithreplicas.util;
 public class GeoUtils {
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
 
+    /**
+     * Calculates the Haversine distance between two points on the Earth specified in decimal degrees.
+     * Haversine formula: https://en.wikipedia.org/wiki/Haversine_formula
+     */
     public static double haversineMeters(double lat1, double lon1, double lat2, double lon2) {
         double phi1 = Math.toRadians(lat1);
         double phi2 = Math.toRadians(lat2);
