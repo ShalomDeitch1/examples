@@ -1,4 +1,4 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;

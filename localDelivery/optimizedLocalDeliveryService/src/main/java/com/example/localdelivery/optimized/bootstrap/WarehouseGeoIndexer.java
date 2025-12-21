@@ -1,7 +1,10 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.bootstrap;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
+
+import com.example.localdelivery.optimized.dao.ReadDao;
+import com.example.localdelivery.optimized.repository.WarehouseGeoRepository;
 
 @Component
 public class WarehouseGeoIndexer implements CommandLineRunner {

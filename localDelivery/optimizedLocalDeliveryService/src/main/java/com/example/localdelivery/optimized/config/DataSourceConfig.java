@@ -1,6 +1,7 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.config;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -9,7 +10,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
-import javax.sql.DataSource;
+import com.zaxxer.hikari.HikariDataSource;
 
 @Configuration
 @EnableConfigurationProperties(DualDataSourceProperties.class)

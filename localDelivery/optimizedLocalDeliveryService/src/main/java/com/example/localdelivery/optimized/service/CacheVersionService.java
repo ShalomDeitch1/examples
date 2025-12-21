@@ -1,4 +1,4 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.service;
 
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;

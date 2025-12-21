@@ -1,14 +1,14 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.repository;
 
-import jakarta.annotation.PostConstruct;
 import org.springframework.data.geo.Circle;
 import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.Metrics;
 import org.springframework.data.geo.Point;
-import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.core.GeoOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Repository;
+
+import com.example.localdelivery.optimized.model.Models;
 
 import java.util.List;
 import java.util.UUID;

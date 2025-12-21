@@ -1,9 +1,12 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.example.localdelivery.optimized.model.Models;
+import com.example.localdelivery.optimized.service.ItemsService;
 
 import java.util.List;
 

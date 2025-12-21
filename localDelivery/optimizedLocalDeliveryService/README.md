@@ -56,23 +56,30 @@ Quick smoke tests (after the app is running)
 - Get deliverable items for a grid/location (cache + geo):
 
 ```bash
-curl -sS "http://localhost:8080/items?lat=40.7128&lon=-74.0060" | jq .
+curl -sS "http://localhost:8097/items?lat=40.7128&lon=-74.0060" | jq .
 ```
 
 - Place an order (writes to primary, bumps version):
 
 ```bash
-curl -sS -X POST http://localhost:8080/orders \
+# Seeded demo IDs (see src/main/resources/db/migration/V1__init.sql):
+# - Customer (Alice): 20000000-0000-0000-0000-000000000001
+# - Item (Milk):     10000000-0000-0000-0000-000000000001
+
+ORDER_ID=$(curl -sS -X POST http://localhost:8097/orders \
   -H 'Content-Type: application/json' \
-  -d '{ "customerId":"<customer-uuid>", "lines":[{ "itemId":"<item-uuid>", "quantity":1 }] }' | jq .
+  -d '{"customerId":"20000000-0000-0000-0000-000000000001","lines":[{"itemId":"10000000-0000-0000-0000-000000000001","qty":1}]}' | jq -r '.orderId')
+
+echo "Created order: $ORDER_ID"
 ```
 
 - Confirm payment for an order:
 
 ```bash
-curl -sS -X POST http://localhost:8080/orders/<order-uuid>/confirm-payment \
+# Confirm the order using the ORDER_ID returned above
+curl -sS -X POST "http://localhost:8097/orders/$ORDER_ID/confirm-payment" \
   -H 'Content-Type: application/json' \
-  -d '{ "success": true }' | jq .
+  -d '{"success": true}' | jq .
 ```
 
 Notes:

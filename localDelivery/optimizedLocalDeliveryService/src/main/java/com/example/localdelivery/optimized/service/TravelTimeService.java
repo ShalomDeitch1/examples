@@ -1,6 +1,8 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.service;
 
 import org.springframework.stereotype.Service;
+
+import com.example.localdelivery.optimized.util.GeoUtils;
 
 @Service
 public class TravelTimeService {

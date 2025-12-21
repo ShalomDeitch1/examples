@@ -1,9 +1,11 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.dao;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.example.localdelivery.optimized.model.Models;
 
 import java.util.List;
 import java.util.Optional;

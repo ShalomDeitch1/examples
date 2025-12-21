@@ -1,4 +1,4 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

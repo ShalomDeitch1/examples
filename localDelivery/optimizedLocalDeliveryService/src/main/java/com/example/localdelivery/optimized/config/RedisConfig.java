@@ -1,11 +1,12 @@
-package com.example.localdelivery.optimized;
+package com.example.localdelivery.optimized.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Configuration
 public class RedisConfig {
@@ -23,6 +24,10 @@ public class RedisConfig {
 
     @Bean
     public ObjectMapper objectMapper() {
-        return new ObjectMapper();
+        ObjectMapper om = new ObjectMapper();
+        // Handle Java 8+ date/time types (Instant, LocalDate, etc.) as ISO strings
+        om.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+        om.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        return om;
     }
 }
