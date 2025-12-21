@@ -23,6 +23,11 @@ graph TB
   ItemsAPI --> Version
 ```
 
+```
+
+Note: the service normally reads from a read-replica for better read throughput, but to avoid returning stale data immediately after a write it will temporarily bypass the replica and read from the primary. Concretely, if a write to a geographic grid happened very recently (the code uses a short "replica-lag guard" window), the service reads warehouses/inventory from the primary database for correctness; otherwise it reads from replicas for performance.
+
+
 ## What this is demonstrating
 
 - Read path uses cache first, then read replicas

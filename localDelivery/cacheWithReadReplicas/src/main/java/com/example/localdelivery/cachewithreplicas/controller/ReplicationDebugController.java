@@ -22,6 +22,13 @@ public class ReplicationDebugController {
         this.replicaJdbc = replicaJdbcTemplate;
     }
 
+
+    /**
+     * Returns the Log Sequence Number (LSN) information for primary and replica databases.
+     * LSN represents the position in the PostgreSQL write-ahead log (WAL).
+     * We use this to monitor replication lag by comparing the primary's current WAL position
+     * with the replica's last replayed position, helping ensure data consistency.
+     */
     @GetMapping("/lsn")
     public Map<String, Object> lsn() {
         String primaryLsn = primaryJdbc.queryForObject("SELECT pg_current_wal_lsn()::text", String.class);
