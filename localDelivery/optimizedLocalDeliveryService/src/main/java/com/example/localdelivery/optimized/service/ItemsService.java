@@ -4,9 +4,7 @@ import com.example.localdelivery.optimized.dao.ReadDao;
 import com.example.localdelivery.optimized.model.Models;
 import com.example.localdelivery.optimized.repository.WarehouseGeoRepository;
 import com.example.localdelivery.optimized.util.GridKey;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -25,50 +23,28 @@ public class ItemsService {
     private static final double WAREHOUSE_SEARCH_RADIUS_KM = 10.0;
     private static final int MAX_WAREHOUSES = 50;
 
-    private final RedisTemplate<String, String> redisTemplate;
-    private final ObjectMapper objectMapper;
     private final CacheVersionService versionService;
     private final WarehouseGeoRepository geoRepository;
     private final ReadDao readDao;
     private final TravelTimeService travelTimeService;
 
     public ItemsService(
-            RedisTemplate<String, String> redisTemplate,
-            ObjectMapper objectMapper,
             CacheVersionService versionService,
             WarehouseGeoRepository geoRepository,
             ReadDao readDao,
             TravelTimeService travelTimeService
     ) {
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
         this.versionService = versionService;
         this.geoRepository = geoRepository;
         this.readDao = readDao;
         this.travelTimeService = travelTimeService;
     }
 
+    @Cacheable(cacheNames = "itemsByGrid", keyGenerator = "gridVersionKeyGen")
     public List<Models.DeliverableItem> listDeliverableItems(double lat, double lon) {
-        String gridId = GridKey.compute(lat, lon);
-        long version = versionService.getVersion(gridId);
-        String cacheKey = versionService.dataKey(gridId, version);
-
-        String cached = redisTemplate.opsForValue().get(cacheKey);
-        if (cached != null) {
-            try {
-                return objectMapper.readValue(cached, new TypeReference<>() {});
-            } catch (Exception ignored) {
-            }
-        }
-
-        List<Models.DeliverableItem> computed = compute(lat, lon);
-
-        try {
-            redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(computed), CACHE_TTL_MINUTES, TimeUnit.MINUTES);
-        } catch (Exception ignored) {
-        }
-
-        return computed;
+        // The cache key (grid + version) is provided by the KeyGenerator `gridVersionKeyGen`.
+        // When the cache misses, compute the result as before.
+        return compute(lat, lon);
     }
 
     private List<Models.DeliverableItem> compute(double lat, double lon) {

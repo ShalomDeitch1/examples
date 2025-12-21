@@ -190,6 +190,18 @@ Notes:
 - Cache TTL: 15 minutes for `items:grid:{id}:v{ver}` keys.
 - Warehouses are indexed into Redis GEO at startup by `WarehouseGeoIndexer`.
 
+## Why the cache needs special handling
+
+Read replicas introduce replication lag: a write to the primary may not appear on a replica immediately. If a reader queries a replica and uses a cached result that was computed before a write, it can see stale data.
+
+This project solves that with *versioned cache keys*:
+
+- A per-grid version is stored at `items:grid:{gridId}:version` in Redis and managed by `CacheVersionService`.
+- Readers use a cache key that includes the current version (e.g. `items:grid:{gridId}:v3`). The `ItemsService` read method is annotated with `@Cacheable` and uses a custom `KeyGenerator` (`gridVersionKeyGen`) which computes the grid id and reads the current version to produce the final key.
+- Writers (for example `OrderService`) bump the version for the affected grid after successful writes. Readers will then miss the old cached key and recompute fresh results.
+
+This approach keeps cache invalidation simple and explicit: a write increments a version, and readers automatically use the new version in their keys.
+
 ## When to use these patterns
 
 - **Redis GEO**: good when you need fast “nearest X locations” queries at high QPS and can tolerate eventual refresh of the geo index.
