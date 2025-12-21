@@ -53,6 +53,15 @@ public class DataSourceConfig {
         ds.setJdbcUrl(p.getUrl());
         ds.setUsername(p.getUsername());
         ds.setPassword(p.getPassword());
+        // Do not fail JVM startup if the database is temporarily unavailable.
+        // Hikari's default behavior may fail fast; set to -1 to continue and let the app retry on use.
+        ds.setInitializationFailTimeout(-1);
+        // Sensible timeouts and pool sizing for local dev / smoke tests
+        ds.setConnectionTimeout(30000); // 30s
+        ds.setValidationTimeout(5000); // 5s
+        ds.setMaximumPoolSize(10);
+        ds.setMinimumIdle(1);
+        ds.setConnectionTestQuery("SELECT 1");
         return ds;
     }
 }

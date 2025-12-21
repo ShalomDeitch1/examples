@@ -16,6 +16,6 @@ app:
       username: local
       password: local
     replica:
-      url: jdbc:postgresql://localhost:5470/local_delivery
+      url: jdbc:postgresql://localhost:5471/local_delivery
       username: local
       password: local
