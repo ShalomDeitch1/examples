@@ -1,13 +1,11 @@
 package com.example.localdelivery.cachewithreplicas.controller;
 
+import java.util.Map;
+
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.beans.factory.annotation.Qualifier;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/debug")
@@ -44,6 +42,7 @@ public class ReplicationDebugController {
         );
     }
 
+    
     @GetMapping("/db")
     public Map<String, Object> db() {
         Boolean primaryRecovery = primaryJdbc.queryForObject("SELECT pg_is_in_recovery()", Boolean.class);
