@@ -8,7 +8,7 @@ app:
       username: local
       password: local
     replica:
-      url: jdbc:postgresql://localhost:5450/local_delivery
+      url: jdbc:postgresql://localhost:5451/local_delivery
       username: local
       password: local
 

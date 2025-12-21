@@ -50,6 +50,42 @@ Run the app:
 mvn spring-boot:run
 ```
 
+Quick smoke tests (after the app is running)
+
+- Start the app (background) or run in another terminal:
+
+```bash
+# from project root
+cd localDelivery/postgresGeo
+mvn spring-boot:run
+```
+
+- List all warehouses:
+
+```bash
+curl -sS http://localhost:8091/warehouses | jq .
+```
+
+- Find warehouses within a radius (meters):
+
+```bash
+curl -sS "http://localhost:8091/warehouses/nearby?lat=40.7128&lon=-74.0060&radiusMeters=5000" | jq .
+```
+
+- Find nearest warehouses (limit):
+
+```bash
+curl -sS "http://localhost:8091/warehouses/nearest?lat=40.7128&lon=-74.0060&limit=3" | jq .
+```
+
+- Use the two-phase (grid-prefilter) option for the nearby query:
+
+```bash
+curl -sS "http://localhost:8091/warehouses/nearby?lat=40.7128&lon=-74.0060&radiusMeters=5000&twoPhase=true" | jq .
+```
+
+Note: `jq` is optional but makes JSON output readable. Adjust `lat`, `lon`, and parameters as needed.
+
 ## Trade-offs / Notes
 
 - PostGIS gives accurate distance filtering and rich geospatial operators.

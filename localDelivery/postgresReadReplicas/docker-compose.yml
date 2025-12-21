@@ -1,9 +1,44 @@
 services:
   postgres-primary:
     image: postgres:16
+    container_name: postgres-primary
     environment:
       POSTGRES_DB: local_delivery
       POSTGRES_USER: local
       POSTGRES_PASSWORD: local
+      # replication user password available to init scripts
+      REPLICATOR_PASSWORD: replicator
+    volumes:
+      - pgdata_primary:/var/lib/postgresql/data
+      - ./docker/postgres/init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh:ro
     ports:
       - "5440:5432"
+    networks:
+      - pgnet
+
+  postgres-replica:
+    build:
+      context: ./docker/postgres/replica
+    container_name: postgres-replica
+    environment:
+      POSTGRES_PASSWORD: local
+      REPLICATOR_PASSWORD: replicator
+      PRIMARY_HOST: postgres-primary
+      PRIMARY_PORT: 5432
+      POSTGRES_DB: local_delivery
+      POSTGRES_USER: local
+    volumes:
+      - pgdata_replica:/var/lib/postgresql/data
+    depends_on:
+      - postgres-primary
+    ports:
+      - "5441:5432"
+    networks:
+      - pgnet
+
+networks:
+  pgnet:
+
+volumes:
+  pgdata_primary:
+  pgdata_replica:

@@ -71,7 +71,11 @@ public class WarehouseGeoRepository {
                 new Distance(radiusMeters / 1000.0, Metrics.KILOMETERS)
         );
 
-        GeoResults<RedisGeoCommands.GeoLocation<String>> results = geoOps.radius(WAREHOUSE_GEO_KEY, circle);
+        GeoResults<RedisGeoCommands.GeoLocation<String>> results = geoOps.radius(
+            WAREHOUSE_GEO_KEY,
+            circle,
+            RedisGeoCommands.GeoRadiusCommandArgs.newGeoRadiusArgs().includeDistance()
+        );
         if (results == null) {
             return List.of();
         }
