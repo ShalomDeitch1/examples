@@ -1,37 +1,44 @@
-# DynamoDB locking (conditional updates + transactions)
+# DynamoDB locking (conditional writes + transactions)
 
-DynamoDB supports correctness via conditional writes and transactional write batches.
+Smallest possible demo of **how DynamoDB prevents double-booking**.
+
+We use DynamoDB Local in tests and two tables:
+- `seat_inventory(seat_id, status, order_id)`
+- `orders(order_id, seat_id)`
 
 ## Tech choices
-- Spring MVC
-- DynamoDB (LocalStack later) or AWS
+- Spring Boot 3.5.9 (no web server)
+- AWS SDK v2 (DynamoDB)
+- Testcontainers (DynamoDB Local)
 
-## Conditional update (optimistic)
+## How to run
 
-Reserve a seat only if it is currently AVAILABLE:
-- `UpdateItem` with `ConditionExpression` like `status = :available AND version = :expectedVersion`.
+```bash
+mvn test
+```
 
-## Transactional writes
+## Conditional write
 
-Use `TransactWriteItems` to ensure order + seat updates happen together:
-- Update seat item (condition: AVAILABLE)
-- Put/update order item
-- Put payment intent item (idempotency key)
+Guarantee: only one caller can transition `status` from `AVAILABLE` → `RESERVED`.
 
-## Diagram
+```mermaid
+flowchart TD
+  A[UpdateItem with ConditionExpression] --> B{condition true?}
+  B -->|yes| C[Seat RESERVED]
+  B -->|no| D[ConditionalCheckFailed]
+```
+
+## Transactional write
+
+Guarantee: reserve seat + create order happen together.
 
 ```mermaid
 sequenceDiagram
-  participant TM as Ticketmaster
+  participant App as App
   participant DDB as DynamoDB
-  participant Pay as Payment Provider
 
-  TM->>DDB: TransactWriteItems<br/>- Update SeatInventory if AVAILABLE<br/>- Put Order<br/>- Put PaymentIntent
-  TM->>Pay: authorize(amount)
-  Pay-->>TM: authId
-  TM->>DDB: Update Order status=AUTHORIZED (idempotent)
+  App->>DDB: TransactWriteItems
+  Note over DDB: 1) Update seat if AVAILABLE
+  Note over DDB: 2) Put order if not exists
+  DDB-->>App: success OR conditional failure
 ```
-
-## Trade-offs
-- Pros: scales write throughput; conditional writes are explicit.
-- Cons: different ergonomics than SQL; careful item design is required.
