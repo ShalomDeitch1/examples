@@ -1,16 +1,17 @@
-# Plan — Postgres locking
+# Postgres locking — plan (minimal)
 
-## Goal
-Define and later implement seat reservation and purchase using Postgres transactions with both pessimistic and optimistic locking.
+Goal: runnable, testable examples of **pessimistic vs optimistic** locking.
 
 ## TODO
-- [ ] Define schema for `seat_inventory` with `version` and `reserved_until`.
-- [ ] Implement pessimistic reserve path (`SELECT FOR UPDATE`).
-- [ ] Implement optimistic reserve path (version checks) + retry policy.
-- [ ] Implement finalize path (capture + mark SOLD).
-- [ ] Unit tests for concurrency logic (simulated contention).
-- [ ] Integration tests with Postgres Testcontainers.
+
+- [ ] Create Maven module (Java 21 + Spring Boot 3.5.9)
+- [ ] No web server: keep it library-style + tests
+- [ ] One table: `seat_inventory(event_id, seat_id, status, version)`
+- [ ] Implement pessimistic reserve: `SELECT ... FOR UPDATE` then `UPDATE`
+- [ ] Implement optimistic reserve: `UPDATE ... WHERE version = ?`
+- [ ] Add 2 concurrency tests proving exactly one winner
 
 ## Acceptance criteria
-- Under concurrent attempts, only one purchase succeeds for a seat.
-- Reservation TTL is enforced (expired reservations release seats).
+
+- `mvn test` passes (with Docker running)
+- Both approaches prevent double-reservation

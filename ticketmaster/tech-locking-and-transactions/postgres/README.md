@@ -1,72 +1,55 @@
-# Postgres locking (optimistic + pessimistic)
+# Postgres locking (pessimistic + optimistic)
 
-Postgres is a strong choice for Ticketmaster seat inventory because it offers straightforward transactions and mature locking primitives.
+Simple demo of **how Postgres prevents double-booking**.
+
+We model a single table `seat_inventory(event_id, seat_id, status, version)`.
 
 ## Tech choices
-- Spring MVC + Spring Data JPA
-- Postgres
+- Spring Boot 3.5.9 (no web server)
+- Spring JDBC transactions
+- Testcontainers Postgres (tests start Docker automatically)
 
-## Pessimistic example (row lock)
+## What this shows
 
-Idea: lock the seat row while deciding/reserving.
+1) **Pessimistic locking**: `SELECT ... FOR UPDATE` (one thread holds the row lock).
 
-Pseudo-SQL:
-```sql
-BEGIN;
+2) **Optimistic locking**: `UPDATE ... WHERE version = ?` (only one update wins).
 
-SELECT status, reserved_until
-FROM seat_inventory
-WHERE event_id = :eventId AND seat_id = :seatId
-FOR UPDATE;
+## How to run
 
--- if available
-UPDATE seat_inventory
-SET status = 'RESERVED', reserved_until = now() + interval '2 minutes', order_id = :orderId
-WHERE event_id = :eventId AND seat_id = :seatId;
-
-COMMIT;
+```bash
+mvn test
 ```
 
-## Optimistic example (version column)
-
-Idea: read current version, update only if version matches.
-
-Pseudo-SQL:
-```sql
-UPDATE seat_inventory
-SET status = 'RESERVED', version = version + 1, reserved_until = now() + interval '2 minutes'
-WHERE event_id = :eventId AND seat_id = :seatId
-  AND status = 'AVAILABLE'
-  AND version = :expectedVersion;
-```
-
-## Diagram (reserve → authorize → capture → issue)
+## Pessimistic locking (row lock)
 
 ```mermaid
 sequenceDiagram
-  participant C as Client
-  participant TM as Ticketmaster
+  participant T1 as Thread 1
+  participant T2 as Thread 2
   participant PG as Postgres
-  participant Pay as Payment Provider (mock)
 
-  C->>TM: POST /api/orders
-  TM->>PG: INSERT order (PENDING)
-  TM-->>C: {orderId}
+  T1->>PG: BEGIN
+  T1->>PG: SELECT seat FOR UPDATE
+  T2->>PG: BEGIN
+  T2->>PG: SELECT seat FOR UPDATE
+  Note over T2,PG: waits for T1 to COMMIT
+  T1->>PG: UPDATE status=RESERVED
+  T1->>PG: COMMIT
+  T2->>PG: sees RESERVED
+  T2->>PG: ROLLBACK
+```
 
-  C->>TM: POST /api/orders/{id}:confirm (seats, paymentToken)
-  TM->>PG: TX: lock seat rows + mark RESERVED
-  TM->>Pay: authorize(amount)
-  Pay-->>TM: authId
-  TM->>PG: update order AUTHORIZED
-  TM-->>C: 202 AUTHORIZED
+## Optimistic locking (version column)
 
-  C->>TM: POST /api/orders/{id}:finalize
-  TM->>Pay: capture(authId)
-  Pay-->>TM: captured
-  TM->>PG: TX: mark SOLD + issue ticket
-  TM-->>C: 200 ticket
+```mermaid
+flowchart TD
+  A[Read seat: version=v] --> B[Try UPDATE ... WHERE version=v]
+  B --> C{rows updated == 1?}
+  C -->|yes| D[Success]
+  C -->|no| E[Someone else won]
 ```
 
 ## Trade-offs
-- Pessimistic: simpler correctness, but lower concurrency under hot rows.
-- Optimistic: higher throughput, but retries under contention.
+- Pessimistic: easiest to reason about, but can block under contention.
+- Optimistic: no blocking, but requires retry/"someone won" handling.

@@ -1,15 +1,16 @@
-# Plan — DynamoDB locking
+# DynamoDB locking — plan (minimal)
 
-## Goal
-Define and later implement a DynamoDB-based seat reservation + ordering flow using conditional updates and transactions.
+Goal: runnable, testable examples of **conditional writes** and **transactions**.
 
 ## TODO
-- [ ] Design single-table or multi-table layout for `SeatInventory`, `Order`, `PaymentIntent`.
-- [ ] Implement conditional reserve.
-- [ ] Implement transactional write to bind seat to order.
-- [ ] Add idempotency for confirm/finalize.
-- [ ] Integration tests using LocalStack.
+
+- [ ] Create Maven module (Java 21 + Spring Boot 3.5.9)
+- [ ] Implement conditional seat reserve (`UpdateItem` + `ConditionExpression`)
+- [ ] Implement transact reserve + order create (`TransactWriteItems`)
+- [ ] Integration tests with LocalStack Testcontainers
 
 ## Acceptance criteria
-- Conditional writes prevent double booking.
-- Transactional write binds order and seat consistently.
+
+- `mvn test` passes (with Docker running)
+- Conditional write: 2 racers → exactly 1 wins
+- Transaction write: seat reserved and order created atomically

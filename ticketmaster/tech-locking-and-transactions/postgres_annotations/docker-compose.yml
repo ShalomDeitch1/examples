@@ -1,0 +1,9 @@
+services:
+	postgres:
+		image: postgres:15-alpine
+		environment:
+			POSTGRES_DB: locking
+			POSTGRES_USER: locking
+			POSTGRES_PASSWORD: locking
+		ports:
+			- "5432:5432"
