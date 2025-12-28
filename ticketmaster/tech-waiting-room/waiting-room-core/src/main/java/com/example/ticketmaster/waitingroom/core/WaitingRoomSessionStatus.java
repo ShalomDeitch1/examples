@@ -1,4 +1,4 @@
-package com.example.ticketmaster.waitingroom.sqs;
+package com.example.ticketmaster.waitingroom.core;
 
 public enum WaitingRoomSessionStatus {
   WAITING,

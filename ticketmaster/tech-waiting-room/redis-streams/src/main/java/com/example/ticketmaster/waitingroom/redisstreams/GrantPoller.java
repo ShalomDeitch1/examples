@@ -1,5 +1,9 @@
 package com.example.ticketmaster.waitingroom.redisstreams;
 
+import com.example.ticketmaster.waitingroom.core.GrantHistory;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomCapacityProperties;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomGrantProperties;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomStore;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.redis.connection.stream.Consumer;

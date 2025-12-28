@@ -1,5 +1,9 @@
 package com.example.ticketmaster.waitingroom.kafka;
 
+import com.example.ticketmaster.waitingroom.core.GrantHistory;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomCapacityProperties;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomGrantProperties;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomStore;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 

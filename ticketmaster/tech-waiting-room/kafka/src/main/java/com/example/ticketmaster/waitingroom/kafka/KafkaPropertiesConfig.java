@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({KafkaWaitingRoomProperties.class, WaitingRoomCapacityProperties.class, WaitingRoomGrantProperties.class})
+@EnableConfigurationProperties(KafkaWaitingRoomProperties.class)
 public class KafkaPropertiesConfig {
 }
 

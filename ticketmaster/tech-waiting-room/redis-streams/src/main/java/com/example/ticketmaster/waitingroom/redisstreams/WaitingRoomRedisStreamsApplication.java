@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableScheduling
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "com.example.ticketmaster.waitingroom")
 public class WaitingRoomRedisStreamsApplication {
   public static void main(String[] args) {
     SpringApplication.run(WaitingRoomRedisStreamsApplication.class, args);

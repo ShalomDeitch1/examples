@@ -1,4 +1,4 @@
-package com.example.ticketmaster.waitingroom.redisstreams;
+package com.example.ticketmaster.waitingroom.core;
 
 import java.time.Instant;
 

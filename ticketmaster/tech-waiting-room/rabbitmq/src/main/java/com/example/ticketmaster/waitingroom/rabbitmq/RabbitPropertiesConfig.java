@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({RabbitWaitingRoomProperties.class, WaitingRoomCapacityProperties.class, WaitingRoomGrantProperties.class})
+@EnableConfigurationProperties(RabbitWaitingRoomProperties.class)
 public class RabbitPropertiesConfig {
 }
 

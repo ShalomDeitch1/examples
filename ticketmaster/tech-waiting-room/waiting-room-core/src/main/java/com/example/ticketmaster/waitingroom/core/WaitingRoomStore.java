@@ -1,4 +1,4 @@
-package com.example.ticketmaster.waitingroom.rabbitmq;
+package com.example.ticketmaster.waitingroom.core;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -6,9 +6,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.springframework.stereotype.Component;
-
-@Component
 public class WaitingRoomStore {
   private final ConcurrentHashMap<String, WaitingRoomSession> sessions = new ConcurrentHashMap<>();
   private final Clock clock;
@@ -44,6 +41,17 @@ public class WaitingRoomStore {
     return (int) sessions.values().stream().filter(s -> s.status() == WaitingRoomSessionStatus.ACTIVE).count();
   }
 
+  public boolean tryActivateIfCapacityAllows(String sessionId, int maxActive) {
+    if (maxActive <= 0) {
+      throw new IllegalArgumentException("maxActive must be > 0");
+    }
+    if (activeCount() >= maxActive) {
+      return false;
+    }
+    WaitingRoomSession updated = activate(sessionId);
+    return updated.status() == WaitingRoomSessionStatus.ACTIVE;
+  }
+
   public WaitingRoomSession heartbeat(String sessionId) {
     Instant now = clock.instant();
     return sessions.compute(sessionId, (id, existing) -> {
@@ -71,17 +79,6 @@ public class WaitingRoomStore {
       }
       return new WaitingRoomSession(existing.id(), existing.eventId(), existing.userId(), WaitingRoomSessionStatus.ACTIVE, existing.createdAt(), now, existing.lastHeartbeatAt());
     });
-  }
-
-  public boolean tryActivateIfCapacityAllows(String sessionId, int maxActive) {
-    if (maxActive <= 0) {
-      throw new IllegalArgumentException("maxActive must be > 0");
-    }
-    if (activeCount() >= maxActive) {
-      return false;
-    }
-    WaitingRoomSession updated = activate(sessionId);
-    return updated.status() == WaitingRoomSessionStatus.ACTIVE;
   }
 
   public WaitingRoomSession expire(String sessionId) {

@@ -1,5 +1,9 @@
 package com.example.ticketmaster.waitingroom.sqs;
 
+import com.example.ticketmaster.waitingroom.core.GrantHistory;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomCapacityProperties;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomGrantProperties;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomStore;
 import java.util.List;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -43,12 +47,12 @@ public class SqsGrantPoller {
       return;
     }
 
-    int toGrant = Math.min(availableSlots, grant.groupSize());
+    int toGrant = Math.min(Math.min(availableSlots, grant.groupSize()), 10);
 
     String queueUrl = queueUrlProvider.getQueueUrl();
     ReceiveMessageRequest request = ReceiveMessageRequest.builder()
         .queueUrl(queueUrl)
-      .maxNumberOfMessages(toGrant)
+        .maxNumberOfMessages(toGrant)
         .waitTimeSeconds(0)
         .build();
 
