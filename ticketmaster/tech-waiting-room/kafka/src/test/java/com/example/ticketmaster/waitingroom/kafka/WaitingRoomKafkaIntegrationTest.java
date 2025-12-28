@@ -2,7 +2,13 @@ package com.example.ticketmaster.waitingroom.kafka;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
@@ -33,6 +39,9 @@ class WaitingRoomKafkaIntegrationTest {
   static void registerProps(DynamicPropertyRegistry registry) {
     registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
     registry.add("waitingroom.grant.rate-ms", () -> "50");
+    registry.add("waitingroom.grant.initial-delay-ms", () -> "500");
+    registry.add("waitingroom.capacity.max-active", () -> "10");
+    registry.add("waitingroom.grant.group-size", () -> "10");
     registry.add("waitingroom.kafka.topic", () -> "waiting-room-joins");
   }
 
@@ -43,11 +52,24 @@ class WaitingRoomKafkaIntegrationTest {
   TestRestTemplate rest;
 
   @Test
-  void joinEventuallyBecomesActive() {
-    String sessionId = join("E1", "U1");
+  void grantsInBatchesOfTenUntilAllProcessed() {
+    List<String> sessionIds = IntStream.range(0, 100)
+        .mapToObj(i -> join("E1", "U" + i))
+        .toList();
 
-    WaitingRoomSession session = awaitStatus(sessionId, WaitingRoomSessionStatus.ACTIVE, Duration.ofSeconds(10));
-    assertThat(session.status()).isEqualTo(WaitingRoomSessionStatus.ACTIVE);
+    Set<String> granted = awaitAllGrantedAndReleaseCapacity(sessionIds, Instant.now().plus(Duration.ofSeconds(60)));
+    List<GrantBatch> batches = getBatches();
+
+    assertThat(batches.size()).isGreaterThanOrEqualTo(2);
+    assertThat(batches).allSatisfy(b -> assertThat(b.sessionIds().size()).isLessThanOrEqualTo(10));
+
+    Set<String> allGranted = batches.stream().flatMap(b -> b.sessionIds().stream()).collect(Collectors.toSet());
+    assertThat(allGranted).hasSize(100);
+    assertThat(allGranted).containsAll(sessionIds);
+    assertThat(granted).containsAll(sessionIds);
+  }
+
+  private record GrantBatch(long groupId, String grantedAt, List<String> sessionIds) {
   }
 
   private String join(String eventId, String userId) {
@@ -60,24 +82,53 @@ class WaitingRoomKafkaIntegrationTest {
     ResponseEntity<Map> response = rest.postForEntity(url, request, Map.class);
     assertThat(response.getStatusCode().value()).isEqualTo(202);
 
-    Object value = response.getBody().get("sessionId");
+    Map body = response.getBody();
+    assertThat(body).isNotNull();
+    Object value = body.get("sessionId");
     assertThat(value).isInstanceOf(String.class);
     return (String) value;
   }
 
-  private WaitingRoomSession awaitStatus(String sessionId, WaitingRoomSessionStatus expected, Duration timeout) {
-    Instant deadline = Instant.now().plus(timeout);
-    WaitingRoomSession last = null;
+  private List<GrantBatch> getBatches() {
+    String url = "http://localhost:" + port + "/api/waiting-room/grant-batches";
+    GrantBatch[] response = rest.getForObject(url, GrantBatch[].class);
+    if (response == null) {
+      return List.of();
+    }
+    return Arrays.asList(response);
+  }
+
+  private Set<String> awaitAllGrantedAndReleaseCapacity(List<String> expectedSessionIds, Instant deadline) {
+    Set<String> expected = Set.copyOf(expectedSessionIds);
+    Set<String> alreadyReleased = new HashSet<>();
+    Set<String> granted = new HashSet<>();
 
     while (Instant.now().isBefore(deadline)) {
-      last = rest.getForObject("http://localhost:" + port + "/api/waiting-room/sessions/" + sessionId, WaitingRoomSession.class);
-      if (last != null && last.status() == expected) {
-        return last;
+      List<GrantBatch> batches = getBatches();
+      for (GrantBatch batch : batches) {
+        for (String sessionId : batch.sessionIds()) {
+          granted.add(sessionId);
+        }
       }
+
+      for (String sessionId : granted) {
+        if (alreadyReleased.add(sessionId)) {
+          leave(sessionId);
+        }
+      }
+
+      if (granted.containsAll(expected)) {
+        return granted;
+      }
+
       sleep(Duration.ofMillis(50));
     }
 
-    return last;
+    return granted;
+  }
+
+  private void leave(String sessionId) {
+    rest.postForEntity("http://localhost:" + port + "/api/waiting-room/sessions/" + sessionId + ":leave", null, Void.class);
   }
 
   private static void sleep(Duration duration) {
@@ -89,3 +140,4 @@ class WaitingRoomKafkaIntegrationTest {
     }
   }
 }
+

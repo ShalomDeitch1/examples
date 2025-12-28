@@ -14,24 +14,41 @@ public class SqsGrantPoller {
   private final QueueUrlProvider queueUrlProvider;
   private final WaitingRoomStore store;
   private final WaitingRoomCapacityProperties capacity;
+  private final GrantHistory grantHistory;
+  private final WaitingRoomGrantProperties grant;
 
-  public SqsGrantPoller(SqsClient sqs, QueueUrlProvider queueUrlProvider, WaitingRoomStore store, WaitingRoomCapacityProperties capacity) {
+  public SqsGrantPoller(
+      SqsClient sqs,
+      QueueUrlProvider queueUrlProvider,
+      WaitingRoomStore store,
+      WaitingRoomCapacityProperties capacity,
+      GrantHistory grantHistory,
+      WaitingRoomGrantProperties grant
+  ) {
     this.sqs = sqs;
     this.queueUrlProvider = queueUrlProvider;
     this.store = store;
     this.capacity = capacity;
+    this.grantHistory = grantHistory;
+    this.grant = grant;
   }
 
-  @Scheduled(fixedDelayString = "${waitingroom.poll.rate-ms:200}")
+  @Scheduled(
+      fixedDelayString = "${waitingroom.poll.rate-ms:200}",
+      initialDelayString = "${waitingroom.poll.initial-delay-ms:0}"
+  )
   public void pollAndGrant() {
-    if (store.activeCount() >= capacity.maxActive()) {
+    int availableSlots = capacity.maxActive() - store.activeCount();
+    if (availableSlots <= 0) {
       return;
     }
+
+    int toGrant = Math.min(availableSlots, grant.groupSize());
 
     String queueUrl = queueUrlProvider.getQueueUrl();
     ReceiveMessageRequest request = ReceiveMessageRequest.builder()
         .queueUrl(queueUrl)
-        .maxNumberOfMessages(1)
+      .maxNumberOfMessages(toGrant)
         .waitTimeSeconds(0)
         .build();
 
@@ -40,20 +57,29 @@ public class SqsGrantPoller {
       return;
     }
 
-    Message message = messages.getFirst();
-    String sessionId = message.body();
+    var activatedIds = new java.util.ArrayList<String>(toGrant);
+    for (Message message : messages) {
+      String sessionId = message.body();
 
-    boolean activated;
-    try {
-      activated = store.tryActivateIfCapacityAllows(sessionId, capacity.maxActive());
-    } catch (IllegalArgumentException e) {
-      // Unknown session; treat as stale.
-      activated = true;
+      boolean activated;
+      try {
+        activated = store.tryActivateIfCapacityAllows(sessionId, capacity.maxActive());
+      } catch (IllegalArgumentException e) {
+        // Unknown session; treat as stale.
+        activated = true;
+      }
+
+      if (activated) {
+        activatedIds.add(sessionId);
+        sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(message.receiptHandle()).build());
+        continue;
+      }
+
+      // Capacity race: keep the remaining messages for later.
+      break;
     }
 
-    // Delete if granted (or stale/duplicate). If capacity is full, message will reappear later.
-    if (activated) {
-      sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(message.receiptHandle()).build());
-    }
+    grantHistory.record(activatedIds);
   }
 }
+

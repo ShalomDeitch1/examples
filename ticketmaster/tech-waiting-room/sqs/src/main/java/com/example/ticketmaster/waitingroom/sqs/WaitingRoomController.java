@@ -1,6 +1,7 @@
 package com.example.ticketmaster.waitingroom.sqs;
 
 import java.util.Map;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,10 +14,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class WaitingRoomController {
   private final WaitingRoomStore store;
   private final WaitingRoomJoinPublisher publisher;
+  private final GrantHistory grantHistory;
 
-  public WaitingRoomController(WaitingRoomStore store, WaitingRoomJoinPublisher publisher) {
+  public WaitingRoomController(WaitingRoomStore store, WaitingRoomJoinPublisher publisher, GrantHistory grantHistory) {
     this.store = store;
     this.publisher = publisher;
+    this.grantHistory = grantHistory;
   }
 
   public record JoinRequest(String eventId, String userId) {
@@ -35,6 +38,11 @@ public class WaitingRoomController {
     return store.get(id).orElseThrow(() -> new IllegalArgumentException("Unknown session: " + id));
   }
 
+  @GetMapping("/api/waiting-room/grant-batches")
+  public List<GrantHistory.GrantBatch> grantBatches() {
+    return grantHistory.list();
+  }
+
   @PostMapping("/api/waiting-room/sessions/{id}:heartbeat")
   public WaitingRoomSession heartbeat(@PathVariable("id") String id) {
     return store.heartbeat(id);
@@ -45,3 +53,4 @@ public class WaitingRoomController {
     return store.expire(id);
   }
 }
+
