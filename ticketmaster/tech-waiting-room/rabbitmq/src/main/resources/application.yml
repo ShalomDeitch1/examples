@@ -1,0 +1,12 @@
+waitingroom:
+  rabbitmq:
+    exchange: waiting-room
+    queue: waiting-room.joins
+    routing-key: join
+  grant:
+    rate-ms: 200
+  capacity:
+    max-active: 200
+
+server:
+  port: 8080

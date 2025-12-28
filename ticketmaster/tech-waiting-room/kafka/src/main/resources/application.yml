@@ -1,0 +1,18 @@
+waitingroom:
+  kafka:
+    topic: waiting-room-joins
+  grant:
+    rate-ms: 200
+  capacity:
+    max-active: 200
+
+spring:
+  kafka:
+    admin:
+      auto-create: true
+    consumer:
+      auto-offset-reset: earliest
+      group-id: waiting-room-granter
+
+server:
+  port: 8080

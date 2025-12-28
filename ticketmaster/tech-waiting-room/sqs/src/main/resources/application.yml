@@ -1,0 +1,15 @@
+waitingroom:
+  sqs:
+    queue-name: waiting-room-joins
+    region: us-east-1
+    access-key: test
+    secret-key: test
+    endpoint: "" # for LocalStack, set to e.g. http://localhost:4566
+    auto-create-queue: true
+  poll:
+    rate-ms: 200
+  capacity:
+    max-active: 200
+
+server:
+  port: 8080

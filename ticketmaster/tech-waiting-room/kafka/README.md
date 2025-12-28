@@ -48,3 +48,42 @@ sequenceDiagram
 ## Trade-offs
 - Pros: replay, multiple consumers, strong per-partition ordering.
 - Cons: heavier ops than Redis Streams; more concepts (partitions, offsets) for a simple waiting room.
+
+## Run tests
+
+```bash
+./test.sh
+```
+
+## Run locally
+
+This project’s “happy path” is via tests (it uses Testcontainers). For a manual run you need a reachable Kafka broker.
+
+```bash
+./run.sh
+```
+
+## Try it (curl)
+
+Join and capture `sessionId`:
+
+```bash
+sessionId=$(curl -s -XPOST localhost:8080/api/waiting-room/sessions \
+  -H 'content-type: application/json' \
+  -d '{"eventId":"E1","userId":"U1"}' | jq -r .sessionId)
+echo "$sessionId"
+```
+
+If you don’t have `jq`, just print the JSON:
+
+```bash
+curl -s -XPOST localhost:8080/api/waiting-room/sessions \
+  -H 'content-type: application/json' \
+  -d '{"eventId":"E1","userId":"U1"}'
+```
+
+Poll for status:
+
+```bash
+curl -s localhost:8080/api/waiting-room/sessions/$sessionId | jq
+```

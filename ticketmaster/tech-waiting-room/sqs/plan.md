@@ -3,15 +3,26 @@
 ## Goal
 Implement a minimal waiting room using SQS-style queueing and document correctness + failure modes.
 
-## TODO
-- [ ] Define `WaitingRoomSession` table schema and statuses.
-- [ ] Add controller endpoints to join and poll session status.
-- [ ] Add SQS producer to enqueue join events.
-- [ ] Add a worker/consumer that grants permits up to `maxActiveSelectors`.
-- [ ] Add idempotency to join (e.g., `Idempotency-Key` header).
-- [ ] Add integration test using LocalStack.
+## Implemented
+- Spring Boot app exposing a small HTTP API for joining and polling.
+- In-memory `WaitingRoomStore` tracking sessions and status transitions.
+- `WaitingRoomJoinPublisher` that enqueues join requests into SQS (message body = `sessionId`).
+- `SqsGrantPoller` scheduled poller that:
+	- receives messages
+	- activates sessions when capacity allows
+	- deletes consumed messages
+- Queue auto-creation for local/dev via `QueueUrlProvider`.
 
 ## Acceptance criteria
 - Joining creates a WAITING session and enqueues a message.
 - Worker grants ACTIVE status respecting max active concurrency.
 - Polling returns deterministic status transitions.
+
+## Correctness notes
+- Capacity gating is enforced at grant time using `WaitingRoomStore.tryActivateIfCapacityAllows(...)`.
+- Activation is idempotent (re-activating an already ACTIVE session is a no-op).
+- On capacity full, the poller leaves the message in the queue (no delete), so it can be retried.
+
+## Tests
+- Unit: store validation and capacity gating.
+- Integration: LocalStack (Testcontainers) validates HTTP join -> SQS send -> poller activation -> ACTIVE.

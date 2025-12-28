@@ -3,13 +3,17 @@
 ## Goal
 Implement a minimal Redis Streams waiting room with consumer groups and document pending-entry handling.
 
-## TODO
-- [ ] Define stream naming and retention strategy.
-- [ ] Implement join producer (XADD).
-- [ ] Implement granter consumer group (XREADGROUP + XACK).
-- [ ] Handle stuck pending entries (XCLAIM) and consumer crash recovery.
-- [ ] Integration tests using Redis Testcontainers.
+## Implemented design
+- Stream: `waiting-room-joins`
+- Consumer group: `granter` (created with `MKSTREAM`)
+- Producer: HTTP join endpoint creates a `WAITING` session then `XADD`’s `{sessionId,eventId,userId}`
+- Consumer: scheduled `XREADGROUP` poller activates sessions up to `waitingroom.capacity.max-active` and `XACK`s on successful activation
 
-## Acceptance criteria
-- Joins are processed at-least-once and grant logic is idempotent.
-- Pending entries are reclaimed and processed.
+## Correctness notes
+- Redis Streams consumer groups are at-least-once.
+- Activation is idempotent.
+- This minimal example does not implement `XCLAIM`/PEL recovery; it keeps the concept focused.
+
+## Tests
+- Unit tests: store validation and capacity
+- Integration test: Redis Testcontainers + HTTP join → eventual `ACTIVE`

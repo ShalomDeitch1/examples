@@ -8,12 +8,13 @@ The waiting room goal is to **meter access** to expensive/contended operations (
 
 - Without metering, popular events create a thundering herd on the seat inventory rows and payment path.
 - A waiting room converts “N concurrent seat-reserve attempts” into a **controlled concurrency** (e.g., only 200 active selectors).
+- This improves user experience as usually they will be able to book a seat they see, without metering, too many users try to access the same seats so a user may often try to reserve a seat only to find that it is already taken.
 - The core correctness rule is still enforced elsewhere: **never double-book a seat**.
 
 ## Options compared
 
 This folder contains one subproject per option:
-- `sqs/` — AWS SQS style queue (link to existing repo SQS examples in `dropbox/` from `ticketmaster/README.md`).
+- `sqs/` — AWS SQS style queue
 - `rabbitmq/` — classic AMQP broker.
 - `kafka/` — log-based broker with consumer groups.
 - `redis-streams/` — Redis Streams with consumer groups (chosen default for the “real implementation” in this repo).

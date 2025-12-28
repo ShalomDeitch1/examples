@@ -45,3 +45,33 @@ sequenceDiagram
 ## Trade-offs
 - Pros: strong work-queue semantics; flexible routing.
 - Cons: operating a broker; limited replay compared to Kafka; at-least-once delivery → need idempotent consumers.
+
+## Run tests
+
+```bash
+./test.sh
+```
+
+## Run locally
+
+For a manual run you need a reachable RabbitMQ broker (the tests use Testcontainers).
+
+```bash
+./run.sh
+```
+
+## Try it (curl)
+
+Join and capture `sessionId`:
+
+```bash
+curl -s -XPOST localhost:8080/api/waiting-room/sessions \
+  -H 'content-type: application/json' \
+  -d '{"eventId":"E1","userId":"U1"}'
+```
+
+Poll for status (replace `<sessionId>`):
+
+```bash
+curl -s localhost:8080/api/waiting-room/sessions/<sessionId>
+```
