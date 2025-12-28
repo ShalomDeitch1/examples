@@ -12,6 +12,32 @@ Redis Streams provides a low-moving-parts waiting room with consumer groups, whi
 - Consumer group: `granter`
 - Each join is an `XADD` entry containing `{sessionId, eventId, userId}`.
 
+## Redis "standard" vs "FIFO" (what that means here)
+
+Redis doesn’t have an SQS-style “Standard vs FIFO queue” product switch, but you can choose patterns with similar trade-offs:
+
+- **"Standard" (best-effort fanout): Redis Pub/Sub**
+  - Example: publish a join event to a channel and have one or more consumers react.
+  - Why use it: ultra-simple, low latency, good when you can tolerate dropped events (no persistence) and you’re not relying on strict processing order.
+  - Sketch:
+
+    ```text
+    PUBLISH waiting-room-joins "{sessionId:123,eventId:E1,userId:U1}"
+    SUBSCRIBE waiting-room-joins
+    ```
+
+- **"FIFO" (durable ordered processing): Redis Streams + consumer groups (this project)**
+  - Example: write joins to a stream (`XADD`) and have a consumer group read them (`XREADGROUP`) and ack (`XACK`).
+  - Why use it: you want durability (replayable history), backpressure, and an order-preserving log.
+  - Sketch:
+
+    ```text
+    XADD waiting-room-joins * sessionId 123 eventId E1 userId U1
+    XGROUP CREATE waiting-room-joins granter $ MKSTREAM
+    XREADGROUP GROUP granter c1 COUNT 10 STREAMS waiting-room-joins >
+    XACK waiting-room-joins granter <entryId>
+    ```
+
 ## API sketch
 
 - `POST /api/waiting-room/sessions` → `{sessionId}`

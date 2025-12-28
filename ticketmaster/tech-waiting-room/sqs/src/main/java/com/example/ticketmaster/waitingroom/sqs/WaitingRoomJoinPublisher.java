@@ -14,10 +14,10 @@ public class WaitingRoomJoinPublisher {
     this.queueUrlProvider = queueUrlProvider;
   }
 
-  public void publishJoin(String sessionId) {
+  public void publishRequest(String requestId) {
     sqs.sendMessage(SendMessageRequest.builder()
         .queueUrl(queueUrlProvider.getQueueUrl())
-        .messageBody(sessionId)
+        .messageBody(requestId)
         .build());
   }
 }

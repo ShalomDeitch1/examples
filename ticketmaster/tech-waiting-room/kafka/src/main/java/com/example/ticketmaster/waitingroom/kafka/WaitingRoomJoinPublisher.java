@@ -13,7 +13,7 @@ public class WaitingRoomJoinPublisher {
     this.properties = properties;
   }
 
-  public void publishJoin(String eventId, String sessionId) {
-    kafkaTemplate.send(properties.topic(), eventId, sessionId);
+  public void publishRequest(String eventId, String requestId) {
+    kafkaTemplate.send(properties.topic(), eventId, requestId);
   }
 }

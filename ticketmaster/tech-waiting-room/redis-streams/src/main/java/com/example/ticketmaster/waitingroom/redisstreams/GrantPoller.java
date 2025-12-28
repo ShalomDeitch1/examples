@@ -1,9 +1,8 @@
 package com.example.ticketmaster.waitingroom.redisstreams;
 
-import com.example.ticketmaster.waitingroom.core.GrantHistory;
-import com.example.ticketmaster.waitingroom.core.WaitingRoomCapacityProperties;
-import com.example.ticketmaster.waitingroom.core.WaitingRoomGrantProperties;
-import com.example.ticketmaster.waitingroom.core.WaitingRoomStore;
+import com.example.ticketmaster.waitingroom.core.ProcessingHistory;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomProcessingProperties;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomRequestStore;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -19,41 +18,33 @@ import org.springframework.stereotype.Component;
 public class GrantPoller {
   private final StringRedisTemplate redis;
   private final RedisStreamsWaitingRoomProperties properties;
-  private final WaitingRoomStore store;
-  private final WaitingRoomCapacityProperties capacity;
-  private final GrantHistory grantHistory;
-  private final WaitingRoomGrantProperties grant;
+  private final WaitingRoomRequestStore store;
+  private final WaitingRoomProcessingProperties processing;
+  private final ProcessingHistory processingHistory;
 
   public GrantPoller(
       StringRedisTemplate redis,
       RedisStreamsWaitingRoomProperties properties,
-      WaitingRoomStore store,
-      WaitingRoomCapacityProperties capacity,
-      GrantHistory grantHistory,
-      WaitingRoomGrantProperties grant
+      WaitingRoomRequestStore store,
+      WaitingRoomProcessingProperties processing,
+      ProcessingHistory processingHistory
   ) {
     this.redis = redis;
     this.properties = properties;
     this.store = store;
-    this.capacity = capacity;
-    this.grantHistory = grantHistory;
-    this.grant = grant;
+    this.processing = processing;
+    this.processingHistory = processingHistory;
   }
 
   @Scheduled(
-      fixedDelayString = "${waitingroom.grant.rate-ms:200}",
-      initialDelayString = "${waitingroom.grant.initial-delay-ms:0}"
+      fixedDelayString = "${waitingroom.processing.rate-ms:200}",
+      initialDelayString = "${waitingroom.processing.initial-delay-ms:0}"
   )
   public void pollAndGrant() {
-    int availableSlots = capacity.maxActive() - store.activeCount();
-    if (availableSlots <= 0) {
-      return;
-    }
-
-    int toGrant = Math.min(availableSlots, grant.groupSize());
+    int toProcess = processing.batchSize();
 
     Consumer consumer = Consumer.from(properties.consumerGroup(), properties.consumerName());
-    StreamReadOptions options = StreamReadOptions.empty().count(toGrant);
+    StreamReadOptions options = StreamReadOptions.empty().count(toProcess);
 
     List<MapRecord<String, Object, Object>> records = redis.opsForStream().read(
         consumer,
@@ -65,32 +56,22 @@ public class GrantPoller {
       return;
     }
 
-    var activatedIds = new java.util.ArrayList<String>(toGrant);
+    var processedIds = new java.util.ArrayList<String>(toProcess);
     for (MapRecord<String, Object, Object> record : records) {
       Map<Object, Object> value = record.getValue();
-      Object rawSessionId = value.get("sessionId");
-      String sessionId = rawSessionId == null ? null : rawSessionId.toString();
-      if (sessionId == null || sessionId.isBlank()) {
+      Object rawRequestId = value.get("requestId");
+      String requestId = rawRequestId == null ? null : rawRequestId.toString();
+      if (requestId == null || requestId.isBlank()) {
         redis.opsForStream().acknowledge(properties.stream(), properties.consumerGroup(), record.getId());
         continue;
       }
 
-      boolean activated = store.tryActivateIfCapacityAllows(sessionId, capacity.maxActive());
-      if (activated) {
-        activatedIds.add(sessionId);
-        redis.opsForStream().acknowledge(properties.stream(), properties.consumerGroup(), record.getId());
-        continue;
-      }
-
-      // Capacity race: ack, then re-enqueue for later to avoid leaving the message pending forever.
+      store.markProcessed(requestId);
+      processedIds.add(requestId);
       redis.opsForStream().acknowledge(properties.stream(), properties.consumerGroup(), record.getId());
-      redis.opsForStream().add(org.springframework.data.redis.connection.stream.StreamRecords.newRecord()
-          .ofObject(java.util.Map.of("sessionId", sessionId))
-          .withStreamKey(properties.stream()));
-      break;
     }
 
-    grantHistory.record(activatedIds);
+    processingHistory.record(processedIds);
   }
 }
 

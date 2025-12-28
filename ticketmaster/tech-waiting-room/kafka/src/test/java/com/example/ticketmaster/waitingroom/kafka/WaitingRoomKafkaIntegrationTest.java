@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 import com.example.ticketmaster.waitingroom.testsupport.WaitingRoomTestClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,10 +14,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.KafkaContainer;
@@ -34,10 +31,9 @@ class WaitingRoomKafkaIntegrationTest {
   @DynamicPropertySource
   static void registerProps(DynamicPropertyRegistry registry) {
     registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
-    registry.add("waitingroom.grant.rate-ms", () -> "50");
-    registry.add("waitingroom.grant.initial-delay-ms", () -> "500");
-    registry.add("waitingroom.capacity.max-active", () -> "10");
-    registry.add("waitingroom.grant.group-size", () -> "10");
+    registry.add("waitingroom.processing.rate-ms", () -> "50");
+    registry.add("waitingroom.processing.initial-delay-ms", () -> "1500");
+    registry.add("waitingroom.processing.batch-size", () -> "10");
     registry.add("waitingroom.kafka.topic", () -> "waiting-room-joins");
   }
 
@@ -50,18 +46,25 @@ class WaitingRoomKafkaIntegrationTest {
   @Test
   void grantsInBatchesOfTenUntilAllProcessed() {
     var client = new WaitingRoomTestClient(rest, port);
-    List<String> sessionIds = client.joinMany("E1", 100);
+    List<String> requestIds = client.joinManyFast("E1", 100, 20);
 
-    var progress = client.awaitAllGrantedAndReleaseCapacity(sessionIds, Duration.ofSeconds(60));
-    List<WaitingRoomTestClient.GrantBatchDto> batches = progress.batches();
+    assertThat(requestIds).allSatisfy(id -> assertThat(id)
+        .withFailMessage("SESSION ID NOT NUMERIC: %s", id)
+        .matches("\\d+"));
+    WaitingRoomTestClient.assertNumericConsecutiveIds(requestIds);
 
-    assertThat(batches.size()).isGreaterThanOrEqualTo(2);
-    assertThat(batches).allSatisfy(b -> assertThat(b.sessionIds().size()).isLessThanOrEqualTo(10));
+    var progress = client.awaitAllProcessed(requestIds, Duration.ofSeconds(60));
+    List<WaitingRoomTestClient.ProcessingBatchDto> batches = progress.batches();
 
-    Set<String> allGranted = batches.stream().flatMap(b -> b.sessionIds().stream()).collect(Collectors.toSet());
+      assertThat(batches.size()).withFailMessage("Expected at least 10 batches, was %s", batches.size()).isGreaterThanOrEqualTo(10);
+      assertThat(batches).allSatisfy(b -> assertThat(b.requestIds().size()).isLessThanOrEqualTo(10));
+
+    Set<String> allGranted = batches.stream().flatMap(b -> b.requestIds().stream()).collect(Collectors.toSet());
     assertThat(allGranted).hasSize(100);
-    assertThat(allGranted).containsAll(sessionIds);
-    assertThat(progress.grantedSessionIds()).containsAll(sessionIds);
+    assertThat(allGranted).containsAll(requestIds);
+    assertThat(progress.processedRequestIds()).containsAll(requestIds);
+
+      WaitingRoomTestClient.assertAndLogGrouping(requestIds, batches);
   }
 }
 

@@ -3,12 +3,13 @@ package com.example.ticketmaster.waitingroom.core;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class WaitingRoomStore {
   private final ConcurrentHashMap<String, WaitingRoomSession> sessions = new ConcurrentHashMap<>();
   private final Clock clock;
+  private final AtomicLong idSequence = new AtomicLong(0);
 
   public WaitingRoomStore() {
     this(Clock.systemUTC());
@@ -27,7 +28,7 @@ public class WaitingRoomStore {
     }
 
     Instant now = clock.instant();
-    String id = UUID.randomUUID().toString();
+    String id = Long.toString(idSequence.incrementAndGet());
     WaitingRoomSession session = new WaitingRoomSession(id, eventId, userId, WaitingRoomSessionStatus.WAITING, now, null, now);
     sessions.put(id, session);
     return session;

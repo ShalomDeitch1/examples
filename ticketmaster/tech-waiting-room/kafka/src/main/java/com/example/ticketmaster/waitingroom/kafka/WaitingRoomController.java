@@ -1,61 +1,45 @@
 package com.example.ticketmaster.waitingroom.kafka;
 
-import java.util.List;
 import java.util.Map;
-
-import com.example.ticketmaster.waitingroom.core.GrantHistory;
-import com.example.ticketmaster.waitingroom.core.WaitingRoomSession;
-import com.example.ticketmaster.waitingroom.core.WaitingRoomStore;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.ticketmaster.waitingroom.core.ProcessingHistory;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomObservability;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomRequest;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomRequestStore;
+
 @RestController
 public class WaitingRoomController {
-  private final WaitingRoomStore store;
+  private final WaitingRoomRequestStore store;
   private final WaitingRoomJoinPublisher joinPublisher;
-  private final GrantHistory grantHistory;
+  private final ProcessingHistory processingHistory;
 
-  public WaitingRoomController(WaitingRoomStore store, WaitingRoomJoinPublisher joinPublisher, GrantHistory grantHistory) {
+  public WaitingRoomController(WaitingRoomRequestStore store, WaitingRoomJoinPublisher joinPublisher, ProcessingHistory processingHistory) {
     this.store = store;
     this.joinPublisher = joinPublisher;
-    this.grantHistory = grantHistory;
+    this.processingHistory = processingHistory;
   }
 
-  public record JoinRequest(String eventId, String userId) {
+  public record EnqueueRequest(String eventId, String userId) {
   }
 
-  @PostMapping("/api/waiting-room/sessions")
+  @PostMapping("/api/waiting-room/requests")
   @ResponseStatus(HttpStatus.ACCEPTED)
-  public Map<String, String> join(@RequestBody JoinRequest request) {
-    WaitingRoomSession session = store.createWaiting(request.eventId(), request.userId());
-    joinPublisher.publishJoin(session.eventId(), session.id());
-    return Map.of("sessionId", session.id());
+  public Map<String, String> enqueue(@RequestBody EnqueueRequest request) {
+    WaitingRoomRequest queued = store.createWaiting(request.eventId(), request.userId());
+    joinPublisher.publishRequest(queued.eventId(), queued.id());
+    return Map.of("requestId", queued.id());
   }
 
-  @GetMapping("/api/waiting-room/sessions/{id}")
-  public WaitingRoomSession status(@PathVariable("id") String id) {
-    return store.get(id).orElseThrow(() -> new IllegalArgumentException("Unknown session: " + id));
-  }
-
-  @GetMapping("/api/waiting-room/grant-batches")
-  public List<GrantHistory.GrantBatch> grantBatches() {
-    return grantHistory.list();
-  }
-
-  @PostMapping("/api/waiting-room/sessions/{id}:heartbeat")
-  public WaitingRoomSession heartbeat(@PathVariable("id") String id) {
-    return store.heartbeat(id);
-  }
-
-  @PostMapping("/api/waiting-room/sessions/{id}:leave")
-  public WaitingRoomSession leave(@PathVariable("id") String id) {
-    return store.expire(id);
+  @GetMapping("/api/waiting-room/observability")
+  public WaitingRoomObservability observability() {
+    return new WaitingRoomObservability(store.counts(), processingHistory.list());
   }
 }
 

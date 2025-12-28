@@ -12,7 +12,7 @@ public class WaitingRoomJoinListener {
   }
 
   @RabbitListener(queues = "${waitingroom.rabbitmq.queue}")
-  public void onJoin(String sessionId) {
-    backlog.enqueue(sessionId);
+  public void onRequest(String requestId) {
+    backlog.enqueue(requestId);
   }
 }

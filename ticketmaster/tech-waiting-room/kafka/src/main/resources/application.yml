@@ -1,10 +1,9 @@
 waitingroom:
   kafka:
     topic: waiting-room-joins
-  grant:
+  processing:
+    batch-size: 10
     rate-ms: 200
-  capacity:
-    max-active: 200
 
 spring:
   kafka:

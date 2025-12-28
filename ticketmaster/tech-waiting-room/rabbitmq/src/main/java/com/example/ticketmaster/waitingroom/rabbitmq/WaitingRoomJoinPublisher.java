@@ -13,7 +13,7 @@ public class WaitingRoomJoinPublisher {
     this.properties = properties;
   }
 
-  public void publishJoin(String sessionId) {
-    rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), sessionId);
+  public void publishRequest(String requestId) {
+    rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), requestId);
   }
 }

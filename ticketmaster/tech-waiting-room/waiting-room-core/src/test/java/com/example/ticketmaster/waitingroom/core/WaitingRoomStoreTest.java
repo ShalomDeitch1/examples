@@ -1,12 +1,11 @@
 package com.example.ticketmaster.waitingroom.core;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 
 class WaitingRoomStoreTest {
@@ -37,6 +36,23 @@ class WaitingRoomStoreTest {
 
     assertThat(store.get(first.id())).get().extracting(WaitingRoomSession::status).isEqualTo(WaitingRoomSessionStatus.ACTIVE);
     assertThat(store.get(second.id())).get().extracting(WaitingRoomSession::status).isEqualTo(WaitingRoomSessionStatus.ACTIVE);
+  }
+
+  @Test
+  void createWaiting_assignsMonotonicIds_andAllItemsExist() {
+    WaitingRoomStore store = new WaitingRoomStore(Clock.systemUTC());
+
+    WaitingRoomSession s1 = store.createWaiting("E1", "U1");
+    WaitingRoomSession s2 = store.createWaiting("E1", "U2");
+    WaitingRoomSession s3 = store.createWaiting("E1", "U3");
+
+    assertThat(s1.id()).isEqualTo("1");
+    assertThat(s2.id()).isEqualTo("2");
+    assertThat(s3.id()).isEqualTo("3");
+
+    assertThat(store.get(s1.id())).get().isEqualTo(s1);
+    assertThat(store.get(s2.id())).get().isEqualTo(s2);
+    assertThat(store.get(s3.id())).get().isEqualTo(s3);
   }
 
   @Test

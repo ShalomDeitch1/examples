@@ -12,7 +12,7 @@ public class WaitingRoomJoinListener {
   }
 
   @KafkaListener(topics = "${waitingroom.kafka.topic}")
-  public void onJoin(String sessionId) {
-    backlog.enqueue(sessionId);
+  public void onRequest(String requestId) {
+    backlog.enqueue(requestId);
   }
 }

@@ -1,15 +1,19 @@
 package com.example.ticketmaster.waitingroom.testsupport;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -25,20 +29,150 @@ public class WaitingRoomTestClient {
     this.port = port;
   }
 
-  public record GrantBatchDto(long batchNumber, String grantedAt, List<String> sessionIds) {
+  public record ProcessingBatchDto(long batchNumber, String processedAt, List<String> requestIds) {
   }
 
-  public record GrantProgress(Set<String> grantedSessionIds, List<GrantBatchDto> batches) {
+  public record WaitingRoomCountsDto(int waiting, int processed, int total) {
+  }
+
+  public record ObservabilityDto(WaitingRoomCountsDto counts, List<ProcessingBatchDto> batches) {
+  }
+
+  public record ProcessingProgress(Set<String> processedRequestIds, List<ProcessingBatchDto> batches) {
+  }
+
+  public static void assertAndLogGrouping(List<String> expectedRequestIds, List<ProcessingBatchDto> batches) {
+    System.out.println("\n=== GROUP MEMBERSHIP (BATCHES) ===");
+    for (ProcessingBatchDto batch : batches) {
+      String members = String.join(",", batch.requestIds());
+      System.out.println("GROUP " + batch.batchNumber() + " (size=" + batch.requestIds().size() + "): " + members);
+    }
+
+    Set<String> expected = new TreeSet<>(expectedRequestIds);
+    Set<String> observed = new HashSet<>();
+    Set<String> duplicates = new TreeSet<>();
+
+    for (ProcessingBatchDto batch : batches) {
+      for (String requestId : batch.requestIds()) {
+        if (!observed.add(requestId)) {
+          duplicates.add(requestId);
+        }
+      }
+    }
+
+    Set<String> missing = new TreeSet<>(expected);
+    missing.removeAll(observed);
+
+    Set<String> extra = new TreeSet<>(observed);
+    extra.removeAll(expected);
+
+    if (!missing.isEmpty()) {
+      System.out.println("MISSING ITEMS (NOT IN ANY GROUP): " + missing);
+    }
+    if (!duplicates.isEmpty()) {
+      System.out.println("DUPLICATE ITEMS (IN MULTIPLE GROUPS): " + duplicates);
+    }
+    if (!extra.isEmpty()) {
+      System.out.println("EXTRA ITEMS (NOT EXPECTED): " + extra);
+    }
+
+    assertThat(missing)
+        .withFailMessage("MISSING ITEMS (NOT IN ANY GROUP): %s", missing)
+        .isEmpty();
+    assertThat(duplicates)
+        .withFailMessage("DUPLICATE ITEMS (IN MULTIPLE GROUPS): %s", duplicates)
+        .isEmpty();
+    assertThat(extra)
+        .withFailMessage("EXTRA ITEMS (NOT EXPECTED): %s", extra)
+        .isEmpty();
+
+    String summary = batches.stream()
+        .map(b -> b.batchNumber() + "->" + b.requestIds().size())
+        .collect(Collectors.joining(", "));
+    System.out.println("GROUP SUMMARY (batch->size): " + summary);
+    System.out.println("=== END GROUP MEMBERSHIP ===\n");
+  }
+
+  public static void assertAndLogGroupingExact(
+      List<String> expectedRequestIds,
+      List<ProcessingBatchDto> batches,
+      int expectedGroupCount,
+      int expectedGroupSize
+  ) {
+    assertAndLogGrouping(expectedRequestIds, batches);
+
+    if (batches.size() != expectedGroupCount) {
+      System.out.println("WRONG GROUP COUNT: expected=" + expectedGroupCount + " actual=" + batches.size());
+    }
+
+    var wrongSizes = new TreeSet<String>();
+    for (ProcessingBatchDto batch : batches) {
+      if (batch.requestIds().size() != expectedGroupSize) {
+        wrongSizes.add(batch.batchNumber() + "->" + batch.requestIds().size());
+      }
+    }
+
+    if (!wrongSizes.isEmpty()) {
+      System.out.println("WRONG GROUP SIZE(S): expected=" + expectedGroupSize + " wrong=" + wrongSizes);
+    }
+
+    assertThat(batches)
+        .withFailMessage("WRONG GROUP COUNT: expected=%s actual=%s", expectedGroupCount, batches.size())
+        .hasSize(expectedGroupCount);
+    assertThat(wrongSizes)
+        .withFailMessage("WRONG GROUP SIZE(S): expected=%s wrong=%s", expectedGroupSize, wrongSizes)
+        .isEmpty();
+  }
+
+  public static void assertNumericConsecutiveIds(List<String> requestIds) {
+    List<Long> parsed = requestIds.stream().map(Long::parseLong).sorted().toList();
+    if (parsed.isEmpty()) {
+      return;
+    }
+
+    for (int i = 1; i < parsed.size(); i++) {
+      long previous = parsed.get(i - 1);
+      long current = parsed.get(i);
+      if (current != previous + 1) {
+        System.out.println("NON-CONSECUTIVE IDS: prev=" + previous + " current=" + current);
+        break;
+      }
+    }
+
+    for (int i = 1; i < parsed.size(); i++) {
+      long previous = parsed.get(i - 1);
+      long current = parsed.get(i);
+      assertThat(current)
+          .withFailMessage("NON-CONSECUTIVE IDS: prev=%s current=%s", previous, current)
+          .isEqualTo(previous + 1);
+    }
   }
 
   public List<String> joinMany(String eventId, int count) {
     return IntStream.range(0, count)
-        .mapToObj(i -> join(eventId, "U" + i))
+      .mapToObj(i -> enqueue(eventId, "U" + i))
         .toList();
   }
 
-  public String join(String eventId, String userId) {
-    String url = "http://localhost:" + port + "/api/waiting-room/sessions";
+  public List<String> joinManyFast(String eventId, int count, int concurrency) {
+    if (concurrency <= 0) {
+      throw new IllegalArgumentException("concurrency must be > 0");
+    }
+
+    ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+    try {
+      List<CompletableFuture<String>> futures = IntStream.range(0, count)
+          .mapToObj(i -> CompletableFuture.supplyAsync(() -> enqueue(eventId, "U" + i), executor))
+          .toList();
+
+      return futures.stream().map(CompletableFuture::join).toList();
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  public String enqueue(String eventId, String userId) {
+    String url = "http://localhost:" + port + "/api/waiting-room/requests";
 
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
@@ -49,49 +183,42 @@ public class WaitingRoomTestClient {
 
     Map body = response.getBody();
     assertThat(body).isNotNull();
-    Object value = body.get("sessionId");
+    Object value = body.get("requestId");
     assertThat(value).isInstanceOf(String.class);
     return (String) value;
   }
 
-  public void leave(String sessionId) {
-    rest.postForEntity("http://localhost:" + port + "/api/waiting-room/sessions/" + sessionId + ":leave", null, Void.class);
+  public ObservabilityDto getObservability() {
+    String url = "http://localhost:" + port + "/api/waiting-room/observability";
+    return rest.getForObject(url, ObservabilityDto.class);
   }
 
-  public List<GrantBatchDto> getBatches() {
-    String url = "http://localhost:" + port + "/api/waiting-room/grant-batches";
-    GrantBatchDto[] response = rest.getForObject(url, GrantBatchDto[].class);
-    if (response == null) {
-      return List.of();
-    }
-    return Arrays.asList(response);
-  }
-
-  public GrantProgress awaitAllGrantedAndReleaseCapacity(List<String> expectedSessionIds, Duration timeout) {
+  public ProcessingProgress awaitAllProcessed(List<String> expectedRequestIds, Duration timeout) {
     Instant deadline = Instant.now().plus(timeout);
-    Set<Long> releasedBatches = new HashSet<>();
-    Set<String> granted = new HashSet<>();
+    Set<String> processed = new HashSet<>();
 
     while (Instant.now().isBefore(deadline)) {
-      List<GrantBatchDto> batches = getBatches();
-      for (GrantBatchDto batch : batches) {
-        if (!releasedBatches.add(batch.batchNumber())) {
-          continue;
-        }
-        for (String sessionId : batch.sessionIds()) {
-          granted.add(sessionId);
-          leave(sessionId);
+      ObservabilityDto observability = getObservability();
+      if (observability != null && observability.batches() != null) {
+        for (ProcessingBatchDto batch : observability.batches()) {
+          for (String requestId : batch.requestIds()) {
+            processed.add(requestId);
+          }
         }
       }
 
-      if (granted.containsAll(expectedSessionIds)) {
-        return new GrantProgress(Set.copyOf(granted), getBatches());
+      if (processed.containsAll(expectedRequestIds)) {
+        ObservabilityDto finalObs = getObservability();
+        List<ProcessingBatchDto> batches = finalObs == null || finalObs.batches() == null ? List.of() : finalObs.batches();
+        return new ProcessingProgress(Set.copyOf(processed), batches);
       }
 
       sleep(Duration.ofMillis(50));
     }
 
-    return new GrantProgress(Set.copyOf(granted), getBatches());
+    ObservabilityDto finalObs = getObservability();
+    List<ProcessingBatchDto> batches = finalObs == null || finalObs.batches() == null ? List.of() : finalObs.batches();
+    return new ProcessingProgress(Set.copyOf(processed), batches);
   }
 
   private static void sleep(Duration duration) {

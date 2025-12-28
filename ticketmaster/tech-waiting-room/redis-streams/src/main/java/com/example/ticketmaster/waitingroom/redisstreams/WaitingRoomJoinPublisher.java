@@ -16,12 +16,8 @@ public class WaitingRoomJoinPublisher {
     this.properties = properties;
   }
 
-  public void publishJoin(String sessionId, String eventId, String userId) {
-    Map<String, String> payload = Map.of(
-        "sessionId", sessionId,
-        "eventId", eventId,
-        "userId", userId
-    );
+  public void publishRequest(String requestId) {
+    Map<String, String> payload = Map.of("requestId", requestId);
 
     ObjectRecord<String, Map<String, String>> record = StreamRecords.newRecord()
         .ofObject(payload)

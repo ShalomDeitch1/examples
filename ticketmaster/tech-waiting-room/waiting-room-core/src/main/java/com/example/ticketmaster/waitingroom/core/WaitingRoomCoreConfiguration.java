@@ -5,16 +5,16 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({WaitingRoomCapacityProperties.class, WaitingRoomGrantProperties.class})
+@EnableConfigurationProperties({WaitingRoomProcessingProperties.class})
 public class WaitingRoomCoreConfiguration {
 
   @Bean
-  public WaitingRoomStore waitingRoomStore() {
-    return new WaitingRoomStore();
+  public WaitingRoomRequestStore waitingRoomRequestStore() {
+    return new WaitingRoomRequestStore();
   }
 
   @Bean
-  public GrantHistory grantHistory() {
-    return new GrantHistory();
+  public ProcessingHistory processingHistory() {
+    return new ProcessingHistory();
   }
 }

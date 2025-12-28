@@ -3,10 +3,9 @@ waitingroom:
     stream: waiting-room-joins
     consumer-group: granter
     consumer-name: app
-  grant:
+  processing:
+    batch-size: 10
     rate-ms: 200
-  capacity:
-    max-active: 200
 
 server:
   port: 8080

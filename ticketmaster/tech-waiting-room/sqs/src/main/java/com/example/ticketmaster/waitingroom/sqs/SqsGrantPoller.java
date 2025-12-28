@@ -1,9 +1,8 @@
 package com.example.ticketmaster.waitingroom.sqs;
 
-import com.example.ticketmaster.waitingroom.core.GrantHistory;
-import com.example.ticketmaster.waitingroom.core.WaitingRoomCapacityProperties;
-import com.example.ticketmaster.waitingroom.core.WaitingRoomGrantProperties;
-import com.example.ticketmaster.waitingroom.core.WaitingRoomStore;
+import com.example.ticketmaster.waitingroom.core.ProcessingHistory;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomProcessingProperties;
+import com.example.ticketmaster.waitingroom.core.WaitingRoomRequestStore;
 import java.util.List;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -16,43 +15,35 @@ import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 public class SqsGrantPoller {
   private final SqsClient sqs;
   private final QueueUrlProvider queueUrlProvider;
-  private final WaitingRoomStore store;
-  private final WaitingRoomCapacityProperties capacity;
-  private final GrantHistory grantHistory;
-  private final WaitingRoomGrantProperties grant;
+  private final WaitingRoomRequestStore store;
+  private final WaitingRoomProcessingProperties processing;
+  private final ProcessingHistory processingHistory;
 
   public SqsGrantPoller(
       SqsClient sqs,
       QueueUrlProvider queueUrlProvider,
-      WaitingRoomStore store,
-      WaitingRoomCapacityProperties capacity,
-      GrantHistory grantHistory,
-      WaitingRoomGrantProperties grant
+      WaitingRoomRequestStore store,
+      WaitingRoomProcessingProperties processing,
+      ProcessingHistory processingHistory
   ) {
     this.sqs = sqs;
     this.queueUrlProvider = queueUrlProvider;
     this.store = store;
-    this.capacity = capacity;
-    this.grantHistory = grantHistory;
-    this.grant = grant;
+    this.processing = processing;
+    this.processingHistory = processingHistory;
   }
 
   @Scheduled(
-      fixedDelayString = "${waitingroom.poll.rate-ms:200}",
-      initialDelayString = "${waitingroom.poll.initial-delay-ms:0}"
+      fixedDelayString = "${waitingroom.processing.rate-ms:200}",
+      initialDelayString = "${waitingroom.processing.initial-delay-ms:0}"
   )
   public void pollAndGrant() {
-    int availableSlots = capacity.maxActive() - store.activeCount();
-    if (availableSlots <= 0) {
-      return;
-    }
-
-    int toGrant = Math.min(Math.min(availableSlots, grant.groupSize()), 10);
+    int toProcess = Math.min(processing.batchSize(), 10);
 
     String queueUrl = queueUrlProvider.getQueueUrl();
     ReceiveMessageRequest request = ReceiveMessageRequest.builder()
         .queueUrl(queueUrl)
-        .maxNumberOfMessages(toGrant)
+      .maxNumberOfMessages(toProcess)
         .waitTimeSeconds(0)
         .build();
 
@@ -61,29 +52,15 @@ public class SqsGrantPoller {
       return;
     }
 
-    var activatedIds = new java.util.ArrayList<String>(toGrant);
+    var processedIds = new java.util.ArrayList<String>(toProcess);
     for (Message message : messages) {
-      String sessionId = message.body();
-
-      boolean activated;
-      try {
-        activated = store.tryActivateIfCapacityAllows(sessionId, capacity.maxActive());
-      } catch (IllegalArgumentException e) {
-        // Unknown session; treat as stale.
-        activated = true;
-      }
-
-      if (activated) {
-        activatedIds.add(sessionId);
-        sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(message.receiptHandle()).build());
-        continue;
-      }
-
-      // Capacity race: keep the remaining messages for later.
-      break;
+      String requestId = message.body();
+      store.markProcessed(requestId);
+      processedIds.add(requestId);
+      sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(message.receiptHandle()).build());
     }
 
-    grantHistory.record(activatedIds);
+    processingHistory.record(processedIds);
   }
 }
 
