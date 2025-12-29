@@ -1,6 +1,5 @@
 package com.example.ticketmaster.waitingroom.sqs;
 
-import com.example.ticketmaster.waitingroom.core.ProcessingBatcher;
 import com.example.ticketmaster.waitingroom.core.ProcessingHistory;
 import com.example.ticketmaster.waitingroom.core.WaitingRoomProcessingProperties;
 import com.example.ticketmaster.waitingroom.core.WaitingRoomRequestStore;
@@ -22,7 +21,6 @@ public class SqsGrantPoller {
   private final QueueUrlProvider queueUrlProvider;
   private final WaitingRoomRequestStore store;
   private final WaitingRoomProcessingProperties processing;
-  private final ProcessingBatcher batcher;
   private final ProcessingHistory processingHistory;
   private volatile boolean running = true;
 
@@ -31,14 +29,12 @@ public class SqsGrantPoller {
       QueueUrlProvider queueUrlProvider,
       WaitingRoomRequestStore store,
       WaitingRoomProcessingProperties processing,
-      ProcessingBatcher batcher,
       ProcessingHistory processingHistory
   ) {
     this.sqs = sqs;
     this.queueUrlProvider = queueUrlProvider;
     this.store = store;
     this.processing = processing;
-    this.batcher = batcher;
     this.processingHistory = processingHistory;
   }
 
@@ -73,11 +69,7 @@ public class SqsGrantPoller {
         sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(message.receiptHandle()).build());
       }
 
-      batcher.add(processedIds);
-
-      if (store.counts().waiting() == 0) {
-        batcher.flushRemaining();
-      }
+      processingHistory.record(processedIds);
     } catch (Exception e) {
       if (!running) {
         return;

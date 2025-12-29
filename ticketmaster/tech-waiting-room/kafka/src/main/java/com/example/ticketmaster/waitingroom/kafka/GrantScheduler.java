@@ -1,6 +1,5 @@
 package com.example.ticketmaster.waitingroom.kafka;
 
-import com.example.ticketmaster.waitingroom.core.ProcessingBatcher;
 import com.example.ticketmaster.waitingroom.core.ProcessingHistory;
 import com.example.ticketmaster.waitingroom.core.WaitingRoomProcessingProperties;
 import com.example.ticketmaster.waitingroom.core.WaitingRoomRequestStore;
@@ -16,7 +15,6 @@ public class GrantScheduler {
   private final JoinBacklog backlog;
   private final WaitingRoomRequestStore store;
   private final WaitingRoomProcessingProperties processing;
-  private final ProcessingBatcher batcher;
   private final ProcessingHistory processingHistory;
   private volatile boolean running = true;
 
@@ -24,13 +22,11 @@ public class GrantScheduler {
       JoinBacklog backlog,
       WaitingRoomRequestStore store,
       WaitingRoomProcessingProperties processing,
-      ProcessingBatcher batcher,
       ProcessingHistory processingHistory
   ) {
     this.backlog = backlog;
     this.store = store;
     this.processing = processing;
-    this.batcher = batcher;
     this.processingHistory = processingHistory;
   }
 
@@ -56,11 +52,7 @@ public class GrantScheduler {
         processedIds.add(requestId);
       }
 
-      batcher.add(processedIds);
-
-      if (store.counts().waiting() == 0) {
-        batcher.flushRemaining();
-      }
+      processingHistory.record(processedIds);
     } catch (Exception e) {
       log.warn("Error in GrantScheduler.polling: {}", e.toString());
     }

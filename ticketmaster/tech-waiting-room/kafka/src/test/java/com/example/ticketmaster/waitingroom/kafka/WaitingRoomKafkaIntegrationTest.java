@@ -44,7 +44,7 @@ class WaitingRoomKafkaIntegrationTest {
   TestRestTemplate rest;
 
   @Test
-  void grantsInBatchesOfTenUntilAllProcessed() {
+  void grantsUpToBatchSizePerTickUntilAllProcessed() {
     var client = new WaitingRoomTestClient(rest, port);
     List<String> requestIds = client.joinManyFast("E1", 100, 20);
 
@@ -56,15 +56,20 @@ class WaitingRoomKafkaIntegrationTest {
     var progress = client.awaitAllProcessed(requestIds, Duration.ofSeconds(60));
     List<WaitingRoomTestClient.ProcessingBatchDto> batches = progress.batches();
 
-      assertThat(batches.size()).withFailMessage("Expected at least 10 batches, was %s", batches.size()).isGreaterThanOrEqualTo(10);
-      assertThat(batches).allSatisfy(b -> assertThat(b.requestIds().size()).isLessThanOrEqualTo(10));
+  int batchSize = 10;
+  int expectedMinBatches = (requestIds.size() + batchSize - 1) / batchSize;
+
+  assertThat(batches.size())
+    .withFailMessage("Expected at least %s batches, was %s", expectedMinBatches, batches.size())
+    .isGreaterThanOrEqualTo(expectedMinBatches);
+  assertThat(batches).allSatisfy(b -> assertThat(b.requestIds().size()).isLessThanOrEqualTo(batchSize));
 
     Set<String> allGranted = batches.stream().flatMap(b -> b.requestIds().stream()).collect(Collectors.toSet());
     assertThat(allGranted).hasSize(100);
     assertThat(allGranted).containsAll(requestIds);
     assertThat(progress.processedRequestIds()).containsAll(requestIds);
 
-      WaitingRoomTestClient.assertAndLogGrouping(requestIds, batches);
+    WaitingRoomTestClient.assertAndLogGrouping(requestIds, batches);
   }
 }
 

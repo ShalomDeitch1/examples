@@ -1,0 +1,13 @@
+server:
+  port: 8080
+
+waitingroom:
+  redis:
+    stream: waiting-room-joins
+  processing:
+    # Maximum number of ACTIVE sessions at once
+    capacity: 10
+    # Maximum sessions to grant per scheduler tick
+    batch-size: 10
+    rate-ms: 200
+    initial-delay-ms: 0

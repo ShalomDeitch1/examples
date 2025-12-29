@@ -1,6 +1,5 @@
 package com.example.ticketmaster.waitingroom.redisstreams;
 
-import com.example.ticketmaster.waitingroom.core.ProcessingBatcher;
 import com.example.ticketmaster.waitingroom.core.ProcessingHistory;
 import com.example.ticketmaster.waitingroom.core.WaitingRoomProcessingProperties;
 import com.example.ticketmaster.waitingroom.core.WaitingRoomRequestStore;
@@ -25,7 +24,6 @@ public class GrantPoller {
   private final RedisStreamsWaitingRoomProperties properties;
   private final WaitingRoomRequestStore store;
   private final WaitingRoomProcessingProperties processing;
-  private final ProcessingBatcher batcher;
   private final ProcessingHistory processingHistory;
   private volatile boolean running = true;
 
@@ -34,14 +32,12 @@ public class GrantPoller {
       RedisStreamsWaitingRoomProperties properties,
       WaitingRoomRequestStore store,
       WaitingRoomProcessingProperties processing,
-      ProcessingBatcher batcher,
       ProcessingHistory processingHistory
   ) {
     this.redis = redis;
     this.properties = properties;
     this.store = store;
     this.processing = processing;
-    this.batcher = batcher;
     this.processingHistory = processingHistory;
   }
 
@@ -84,11 +80,7 @@ public class GrantPoller {
         redis.opsForStream().acknowledge(properties.stream(), properties.consumerGroup(), record.getId());
       }
 
-      batcher.add(processedIds);
-
-      if (store.counts().waiting() == 0) {
-        batcher.flushRemaining();
-      }
+      processingHistory.record(processedIds);
     } catch (Exception e) {
       if (!running) {
         return;

@@ -101,6 +101,9 @@ flowchart TD
 	ORIGIN -->|validate token| TOK
 ```
 
+Concrete example in this repo:
+- `ticketmaster/tech-waiting-room-token-session/` — Redis Streams implementation of this pattern.
+
 ### C. The “Buffer” approach (Asynchronous) — used here
 
 This is the approach described above: the queue is the buffer, processing happens in background batches, and the API stays minimal.
@@ -135,3 +138,4 @@ flowchart TD
 - RabbitMQ implementation plan: `rabbitmq/README.md`
 - Kafka implementation plan: `kafka/README.md`
 - Redis Streams implementation plan (default): `redis-streams/README.md`
+- Token/Session bucket example (Redis Streams): `../tech-waiting-room-token-session/README.md`
