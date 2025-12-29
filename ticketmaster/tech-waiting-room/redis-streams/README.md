@@ -10,7 +10,7 @@ Redis Streams provides a low-moving-parts waiting room with consumer groups, whi
 
 - Stream: `waiting-room-joins`
 - Consumer group: `granter`
-- Each join is an `XADD` entry containing `{sessionId, eventId, userId}`.
+- Each join is an `XADD` entry containing `{requestId, eventId, userId}`.
 
 ## Redis "standard" vs "FIFO" (what that means here)
 
@@ -32,16 +32,17 @@ Redis doesn’t have an SQS-style “Standard vs FIFO queue” product switch, b
   - Sketch:
 
     ```text
-    XADD waiting-room-joins * sessionId 123 eventId E1 userId U1
+    XADD waiting-room-joins * requestId 123 eventId E1 userId U1
     XGROUP CREATE waiting-room-joins granter $ MKSTREAM
     XREADGROUP GROUP granter c1 COUNT 10 STREAMS waiting-room-joins >
     XACK waiting-room-joins granter <entryId>
     ```
 
-## API sketch
+  ## API (shared)
 
-- `POST /api/waiting-room/sessions` → `{sessionId}`
-- `GET /api/waiting-room/sessions/{id}` → `{status}`
+  This module uses the shared 2-endpoint API:
+  - `POST /api/waiting-room/requests` → `{ requestId }`
+  - `GET /api/waiting-room/observability` → counts + processing batches
 
 ## Diagrams
 
@@ -49,26 +50,33 @@ Redis doesn’t have an SQS-style “Standard vs FIFO queue” product switch, b
 flowchart LR
   U[User] --> TM[Ticketmaster API]
   TM --> R[(Redis Streams)]
-  G[Granter consumer group] --> R
-  G --> S[(In-memory sessions)]
+  P[Processor consumer group] --> R
+  P --> S[(Request Store)]
+  P --> H[(Processing History)]
+  U --> TM
+  TM --> S
+  TM --> H
 ```
 
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant TM as Ticketmaster API
+  participant TM as Waiting Room API
   participant R as Redis Streams
-  participant G as Granter
-  participant DB as DB
+  participant P as Processor
+  participant S as Store
 
-  U->>TM: POST /waiting-room/sessions
-  TM->>S: create WAITING
-  TM->>R: XADD waiting-room-joins {sessionId,eventId,userId}
-  TM-->>U: 202 {sessionId}
+  U->>TM: POST /api/waiting-room/requests
+  TM->>S: create WAITING request
+  TM->>R: XADD waiting-room-joins {requestId,eventId,userId}
+  TM-->>U: 202 {requestId}
 
-  G->>R: XREADGROUP (granter)
-  G->>S: set ACTIVE if capacity allows
-  G->>R: XACK
+  P->>R: XREADGROUP (granter)
+  P->>S: markProcessed(requestId)
+  P->>R: XACK
+
+  U->>TM: GET /api/waiting-room/observability
+  TM-->>U: {counts, batches}
 ```
 
 ## Trade-offs
@@ -92,13 +100,13 @@ For a manual run you need a reachable Redis instance.
 ## Try it (curl)
 
 ```bash
-curl -s -XPOST localhost:8080/api/waiting-room/sessions \
+curl -s -XPOST localhost:8080/api/waiting-room/requests \
   -H 'content-type: application/json' \
   -d '{"eventId":"E1","userId":"U1"}'
 ```
 
-Then poll status (replace `<sessionId>`):
+Then observe:
 
 ```bash
-curl -s localhost:8080/api/waiting-room/sessions/<sessionId>
+curl -s localhost:8080/api/waiting-room/observability
 ```

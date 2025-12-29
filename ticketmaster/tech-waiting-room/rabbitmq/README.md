@@ -1,15 +1,16 @@
 # Waiting room with RabbitMQ
 
-RabbitMQ implements a waiting room as a classic work-queue: join requests are messages; consumers grant permits.
+RabbitMQ implements a waiting room as a classic work-queue: join requests are messages; consumers process them in batches.
 
 ## Tech choices
 - Spring Boot 3.5.9 (Spring MVC), Java 21
 - RabbitMQ (Testcontainers for local testing)
 
-## API sketch
+## API (shared)
 
-- `POST /api/waiting-room/sessions` → `{waitingRoomSessionId}`
-- `GET /api/waiting-room/sessions/{id}` → `{status}`
+This module uses the shared 2-endpoint API:
+- `POST /api/waiting-room/requests` → `{ requestId }`
+- `GET /api/waiting-room/observability` → counts + processing batches
 
 ## Diagrams
 
@@ -18,10 +19,12 @@ flowchart LR
   U[User] --> TM[Ticketmaster API]
   TM --> X[RabbitMQ exchange]
   X --> Q[Queue: waiting-room]
-  C[Consumer] --> Q
-  C --> DB[(DB: sessions)]
+  P[Processor] --> Q
+  P --> S[(Request Store)]
+  P --> H[(Processing History)]
   U --> TM
-  TM --> DB
+  TM --> S
+  TM --> H
 ```
 
 ```mermaid
@@ -29,17 +32,21 @@ sequenceDiagram
   participant U as User
   participant TM as Ticketmaster API
   participant MQ as RabbitMQ
-  participant C as Consumer
-  participant DB as DB
+  participant P as Processor
+  participant S as Store
 
-  U->>TM: POST /waiting-room/sessions
-  TM->>DB: create session WAITING
-  TM->>MQ: publish(join, sessionId)
-  TM-->>U: 202 {sessionId}
+  U->>TM: POST /api/waiting-room/requests
+  TM->>S: create WAITING request
+  TM->>MQ: publish(join, requestId)
+  TM-->>U: 202 {requestId}
 
-  C->>MQ: consume(join)
-  C->>DB: set ACTIVE if capacity allows
-  C-->>MQ: ack
+  P->>MQ: consume(join)
+  P->>S: markProcessed(requestId)
+  P-->>MQ: ack
+
+  U->>TM: GET /api/waiting-room/observability
+  TM->>S: read counts
+  TM-->>U: {counts, batches}
 ```
 
 ## Trade-offs
@@ -61,17 +68,16 @@ For a manual run you need a reachable RabbitMQ broker (the tests use Testcontain
 ```
 
 ## Try it (curl)
-
-Join and capture `sessionId`:
+Enqueue a request:
 
 ```bash
-curl -s -XPOST localhost:8080/api/waiting-room/sessions \
+curl -s -XPOST localhost:8080/api/waiting-room/requests \
   -H 'content-type: application/json' \
   -d '{"eventId":"E1","userId":"U1"}'
 ```
 
-Poll for status (replace `<sessionId>`):
+Watch processing progress:
 
 ```bash
-curl -s localhost:8080/api/waiting-room/sessions/<sessionId>
+curl -s localhost:8080/api/waiting-room/observability
 ```

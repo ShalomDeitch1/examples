@@ -4,8 +4,8 @@ Shared, non-technology-specific building blocks for the `tech-waiting-room/*` ex
 
 ```mermaid
 flowchart LR
-  C[Controller in tech module] --> S[WaitingRoomStore]
+  C[Controller in tech module] --> S[WaitingRoomRequestStore]
   C --> J["Join Publisher (tech-specific)"]
-  G["Granter (tech-specific)"] --> S
-  G --> H[GrantHistory]
+  P["Processor (tech-specific)"] --> S
+  P --> H[ProcessingHistory]
 ```

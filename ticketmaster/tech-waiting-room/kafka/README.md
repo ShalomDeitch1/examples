@@ -1,6 +1,6 @@
 # Waiting room with Kafka
 
-Kafka supports a waiting room as a stream where consumers grant permits. Kafka shines when you want **replay**, auditability, and multiple independent consumers.
+Kafka supports a waiting room as a stream where consumers process requests. Kafka shines when you want **replay**, auditability, and multiple independent consumers.
 
 ## Tech choices
 - Spring Boot 3.5.9 (Spring MVC), Java 21
@@ -12,10 +12,11 @@ Kafka supports a waiting room as a stream where consumers grant permits. Kafka s
 - Key: `eventId` (keeps an event’s joins ordered per partition)
 - Consumer group: `waiting-room-granter`
 
-## API sketch
+## API (shared)
 
-- `POST /api/waiting-room/sessions` → `{sessionId}`
-- `GET /api/waiting-room/sessions/{id}` → `{status}`
+This module uses the shared 2-endpoint API:
+- `POST /api/waiting-room/requests` → `{ requestId }`
+- `GET /api/waiting-room/observability` → counts + processing batches
 
 ## Diagrams
 
@@ -23,8 +24,12 @@ Kafka supports a waiting room as a stream where consumers grant permits. Kafka s
 flowchart LR
   U[User] --> TM[Ticketmaster API]
   TM --> K[(Kafka topic: waiting-room-joins)]
-  G[Grant consumer group] --> K
-  G --> DB[(DB: sessions)]
+  P[Processor consumer group] --> K
+  P --> S[(Request Store)]
+  P --> H[(Processing History)]
+  U --> TM
+  TM --> S
+  TM --> H
 ```
 
 ```mermaid
@@ -32,17 +37,21 @@ sequenceDiagram
   participant U as User
   participant TM as Ticketmaster API
   participant K as Kafka
-  participant G as Granter
-  participant DB as DB
+  participant P as Processor
+  participant S as Store
 
-  U->>TM: POST /waiting-room/sessions
-  TM->>DB: create WAITING
-  TM->>K: produce(eventId key, sessionId)
-  TM-->>U: 202 {sessionId}
+  U->>TM: POST /api/waiting-room/requests
+  TM->>S: create WAITING request
+  TM->>K: produce(eventId key, requestId)
+  TM-->>U: 202 {requestId}
 
-  G->>K: poll
-  G->>DB: set ACTIVE if capacity allows
-  G->>K: commit offset
+  P->>K: poll
+  P->>S: markProcessed(requestId)
+  P->>K: commit offset
+
+  U->>TM: GET /api/waiting-room/observability
+  TM->>S: read counts
+  TM-->>U: {counts, batches}
 ```
 
 ## Trade-offs
@@ -64,26 +73,16 @@ This project’s “happy path” is via tests (it uses Testcontainers). For a m
 ```
 
 ## Try it (curl)
-
-Join and capture `sessionId`:
-
-```bash
-sessionId=$(curl -s -XPOST localhost:8080/api/waiting-room/sessions \
-  -H 'content-type: application/json' \
-  -d '{"eventId":"E1","userId":"U1"}' | jq -r .sessionId)
-echo "$sessionId"
-```
-
-If you don’t have `jq`, just print the JSON:
+Enqueue a request:
 
 ```bash
-curl -s -XPOST localhost:8080/api/waiting-room/sessions \
+curl -s -XPOST localhost:8080/api/waiting-room/requests \
   -H 'content-type: application/json' \
   -d '{"eventId":"E1","userId":"U1"}'
 ```
 
-Poll for status:
+Watch processing progress:
 
 ```bash
-curl -s localhost:8080/api/waiting-room/sessions/$sessionId | jq
+curl -s localhost:8080/api/waiting-room/observability
 ```
