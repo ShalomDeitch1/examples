@@ -31,12 +31,103 @@ This folder contains one subproject per option:
 Notes:
 - “Rough cost model” is intentionally non-numeric: exact dollars depend on traffic, retention, and ops.
 
-## API sketch (shared)
+## Method used in this repo
 
-All implementations can share the same external API shape:
-- `POST /api/waiting-room/sessions` → join queue, returns `waitingRoomSessionId`
-- `GET /api/waiting-room/sessions/{id}` → status (`WAITING` / `ACTIVE` / `EXPIRED`)
-- `POST /api/waiting-room/sessions/{id}:heartbeat` → keep session alive
+This repo uses **C. The “Buffer” approach (Asynchronous)**.
+
+Idea:
+- Every incoming request is **enqueued**.
+- A background processor **pulls up to N items** (default `10`) per tick, marks them processed, and records the processed IDs in batches for observability.
+- Clients do not hold “sessions” here; the API is intentionally minimal.
+
+### API (shared)
+
+All implementations in this folder use the same two endpoints:
+- `POST /api/waiting-room/requests` → enqueue, returns `{ requestId }`
+- `GET /api/waiting-room/observability` → counts + processing batches
+
+### Flow (Buffer approach)
+
+```mermaid
+flowchart TD
+	U[User] -->|POST /requests| API[Waiting Room API]
+	API --> Q[(Queue / Stream)]
+	P["Batch Processor\n(every rate-ms)"] -->|pull up to N| Q
+	P -->|mark processed| S[(Request Store)]
+	P -->|record batch| H[(Processing History)]
+	U -->|GET /observability| API
+	API --> S
+	API --> H
+```
+
+### Why we used this method
+
+- **Simplest mental model**: enqueue everything, process in batches.
+- **Minimal API surface**: no session lifecycle, heartbeats, expirations.
+- **Technology-agnostic**: works on SQS, RabbitMQ, Kafka, Redis Streams.
+- **Good observability**: batches make it easy to see progress without relying on queue-specific tooling.
+
+Trade-offs:
+- Users poll (or you later add push notifications).
+- Fairness and ordering depend on the underlying queue technology.
+
+## Other waiting room methods (alternatives)
+
+### A. The “Leaky Bucket” (Rate Limiting)
+
+Control *request rate* at the front door. Excess traffic is delayed or rejected (often `429` with `Retry-After`).
+
+```mermaid
+flowchart TD
+	U[User] --> API[API Gateway / Edge]
+	API --> RL[Leaky Bucket\nRate Limiter]
+	RL -->|allowed| ORIGIN[Seat Selection + Reservation]
+	RL -->|throttled| R[429 Retry-After\nor delayed]
+	R --> U
+```
+
+### B. The “Token/Session” Bucket (Stateful Queue)
+
+Users receive a token/session when joining. The waiting room grants *active capacity* to sessions and the user must present the token to access the protected path.
+
+```mermaid
+flowchart TD
+	U[User] -->|join| WR[Waiting Room Service]
+	WR -->|creates| TOK[(Session / Token Store)]
+	WR -->|enqueues| Q[(Queue)]
+	G[Grant Scheduler] -->|dequeue + grant| Q
+	G -->|mark ACTIVE| TOK
+	U -->|present token| ORIGIN[Seat Selection + Reservation]
+	ORIGIN -->|validate token| TOK
+```
+
+### C. The “Buffer” approach (Asynchronous) — used here
+
+This is the approach described above: the queue is the buffer, processing happens in background batches, and the API stays minimal.
+
+```mermaid
+flowchart TD
+	U[User] -->|POST /requests| API[Waiting Room API]
+	API --> Q[(Queue / Stream)]
+	P[Batch Processor] -->|pull N| Q
+	P -->|process| ORIGIN[Seat Selection + Reservation]
+	P -->|record batches| H[(Processing History)]
+	U -->|GET /observability| API
+	API --> H
+```
+
+### D. Cloud-Edge Waiting Room
+
+Push the waiting room closer to users (CDN/edge). Often used to protect origin during massive spikes.
+
+```mermaid
+flowchart TD
+	U[User] --> EDGE[CDN / Edge Waiting Room]
+	EDGE -->|issues short-lived token| TOK[(Edge Token)]
+	EDGE -->|only allowed traffic| ORIGIN[Origin API]
+	ORIGIN -->|validate token| TOK
+	EDGE -->|challenge / queue page| U
+```
 
 ## Links
 

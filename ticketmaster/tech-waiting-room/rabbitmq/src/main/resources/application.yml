@@ -9,3 +9,7 @@ waitingroom:
 
 server:
   port: 8080
+
+logging:
+  level:
+    org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer: ERROR

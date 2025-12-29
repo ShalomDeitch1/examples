@@ -17,4 +17,9 @@ public class WaitingRoomCoreConfiguration {
   public ProcessingHistory processingHistory() {
     return new ProcessingHistory();
   }
+
+  @Bean
+  public ProcessingBatcher processingBatcher(WaitingRoomProcessingProperties processing, ProcessingHistory history) {
+    return new ProcessingBatcher(processing.batchSize(), history);
+  }
 }

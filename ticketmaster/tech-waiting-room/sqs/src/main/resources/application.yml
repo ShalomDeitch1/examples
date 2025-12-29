@@ -12,3 +12,7 @@ waitingroom:
 
 server:
   port: 8080
+
+logging:
+  level:
+    software.amazon.awssdk: ERROR
