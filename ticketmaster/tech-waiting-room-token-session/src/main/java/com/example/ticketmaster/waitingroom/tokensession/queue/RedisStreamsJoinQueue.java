@@ -18,6 +18,7 @@ public class RedisStreamsJoinQueue implements JoinQueue {
 
   @Override
   public void enqueue(String sessionId, String eventId, String userId) {
+    // Join events are durable: the scheduler reads from the stream and grants sessions over time.
     redis.opsForStream()
         .add(
             StreamRecords.mapBacked(Map.of(

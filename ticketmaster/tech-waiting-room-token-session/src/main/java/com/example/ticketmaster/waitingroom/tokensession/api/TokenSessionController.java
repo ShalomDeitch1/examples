@@ -29,6 +29,9 @@ public class TokenSessionController {
   @PostMapping("/sessions")
   @ResponseStatus(HttpStatus.ACCEPTED)
   public CreateSessionResponse create(@Valid @RequestBody CreateSessionRequest request) {
+    // Join flow:
+    // 1) Create a server-side session record with status WAITING.
+    // 2) Enqueue the session ID into the join stream so the grant scheduler can pick it up.
     String sessionId = UUID.randomUUID().toString();
     store.createWaiting(sessionId, request.eventId(), request.userId());
     queue.enqueue(sessionId, request.eventId(), request.userId());
@@ -37,6 +40,7 @@ public class TokenSessionController {
 
   @GetMapping("/sessions/{sessionId}")
   public TokenSession get(@PathVariable String sessionId) {
+    // Polling endpoint used by the client to observe WAITING -> ACTIVE.
     return store.get(sessionId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
   }
@@ -44,6 +48,7 @@ public class TokenSessionController {
   @PostMapping("/sessions/{sessionId}:leave")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void leave(@PathVariable String sessionId) {
+    // Leaving releases capacity by removing the session from the ACTIVE set.
     if (store.getStatus(sessionId).isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND);
     }

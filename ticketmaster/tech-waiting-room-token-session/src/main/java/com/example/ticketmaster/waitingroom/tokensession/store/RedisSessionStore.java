@@ -9,7 +9,10 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class RedisSessionStore implements SessionStore {
+  // Session state is stored as a Redis hash per session.
   private static final String SESSION_KEY_PREFIX = "waiting-room:session:";
+
+  // Active capacity is enforced using a Redis Set that contains ACTIVE session IDs.
   private static final String ACTIVE_SET_KEY = "waiting-room:active";
 
   private final StringRedisTemplate redis;
@@ -20,6 +23,7 @@ public class RedisSessionStore implements SessionStore {
 
   @Override
   public void createWaiting(String sessionId, String eventId, String userId) {
+    // Store enough metadata for debugging/teaching; the public API only returns {sessionId,status}.
     redis.opsForHash().putAll(
         sessionKey(sessionId),
         Map.of(
@@ -41,12 +45,14 @@ public class RedisSessionStore implements SessionStore {
 
   @Override
   public void markActive(String sessionId) {
+    // Status and the active-set must both be updated so capacity checks are fast.
     redis.opsForHash().put(sessionKey(sessionId), "status", TokenSessionStatus.ACTIVE.name());
     redis.opsForSet().add(ACTIVE_SET_KEY, sessionId);
   }
 
   @Override
   public void markLeft(String sessionId) {
+    // Leaving releases capacity by removing the session from the active set.
     redis.opsForHash().put(sessionKey(sessionId), "status", TokenSessionStatus.LEFT.name());
     redis.opsForSet().remove(ACTIVE_SET_KEY, sessionId);
   }
