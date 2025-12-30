@@ -9,9 +9,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class RedisStreamInitializer implements InitializingBean {
   private final RedisConnectionFactory connectionFactory;
-  private final RedisStreamsWaitingRoomProperties properties;
+  private final RedisStreamsProperties properties;
 
-  public RedisStreamInitializer(RedisConnectionFactory connectionFactory, RedisStreamsWaitingRoomProperties properties) {
+  public RedisStreamInitializer(RedisConnectionFactory connectionFactory, RedisStreamsProperties properties) {
     this.connectionFactory = connectionFactory;
     this.properties = properties;
   }

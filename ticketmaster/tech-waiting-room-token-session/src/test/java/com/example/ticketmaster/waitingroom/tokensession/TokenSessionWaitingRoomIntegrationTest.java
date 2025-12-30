@@ -2,8 +2,8 @@ package com.example.ticketmaster.waitingroom.tokensession;
 
 import com.example.ticketmaster.waitingroom.tokensession.api.CreateSessionRequest;
 import com.example.ticketmaster.waitingroom.tokensession.api.CreateSessionResponse;
-import com.example.ticketmaster.waitingroom.tokensession.model.WaitingRoomSession;
-import com.example.ticketmaster.waitingroom.tokensession.model.WaitingRoomSessionStatus;
+import com.example.ticketmaster.waitingroom.tokensession.model.TokenSession;
+import com.example.ticketmaster.waitingroom.tokensession.model.TokenSessionStatus;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.web.server.LocalServerPort;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -76,7 +76,7 @@ class TokenSessionWaitingRoomIntegrationTest {
     assertMaxActive(sessionIds, 10);
 
     Set<String> left = sessionIds.stream()
-        .filter(id -> getSession(id).status() == WaitingRoomSessionStatus.LEFT)
+      .filter(id -> getSession(id).status() == TokenSessionStatus.LEFT)
         .collect(Collectors.toSet());
     assertThat(left).hasSize(20);
   }
@@ -98,10 +98,10 @@ class TokenSessionWaitingRoomIntegrationTest {
     return response.getBody().sessionId();
   }
 
-  private WaitingRoomSession getSession(String sessionId) {
-    ResponseEntity<WaitingRoomSession> response = rest.getForEntity(
+  private TokenSession getSession(String sessionId) {
+    ResponseEntity<TokenSession> response = rest.getForEntity(
         baseUrl() + "/sessions/" + sessionId,
-        WaitingRoomSession.class
+        TokenSession.class
     );
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -121,20 +121,20 @@ class TokenSessionWaitingRoomIntegrationTest {
     long deadline = System.nanoTime() + timeout.toNanos();
 
     while (System.nanoTime() < deadline) {
-      int active = countWithStatus(sessionIds, WaitingRoomSessionStatus.ACTIVE);
+      int active = countWithStatus(sessionIds, TokenSessionStatus.ACTIVE);
       if (active == expectedActive) {
         return;
       }
       sleep(50);
     }
 
-    int active = countWithStatus(sessionIds, WaitingRoomSessionStatus.ACTIVE);
+    int active = countWithStatus(sessionIds, TokenSessionStatus.ACTIVE);
     throw new AssertionError("Timed out waiting for active=" + expectedActive + ", actual=" + active);
   }
 
   private void leaveFirstNActive(List<String> sessionIds, int n) {
     List<String> actives = sessionIds.stream()
-        .filter(id -> getSession(id).status() == WaitingRoomSessionStatus.ACTIVE)
+        .filter(id -> getSession(id).status() == TokenSessionStatus.ACTIVE)
         .limit(n)
         .toList();
 
@@ -144,7 +144,7 @@ class TokenSessionWaitingRoomIntegrationTest {
     // Wait until those are visibly LEFT (avoid racing the next scheduler tick)
     long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
     while (System.nanoTime() < deadline) {
-      boolean allLeft = actives.stream().allMatch(id -> getSession(id).status() == WaitingRoomSessionStatus.LEFT);
+      boolean allLeft = actives.stream().allMatch(id -> getSession(id).status() == TokenSessionStatus.LEFT);
       if (allLeft) {
         return;
       }
@@ -152,7 +152,7 @@ class TokenSessionWaitingRoomIntegrationTest {
     }
   }
 
-  private int countWithStatus(List<String> sessionIds, WaitingRoomSessionStatus status) {
+  private int countWithStatus(List<String> sessionIds, TokenSessionStatus status) {
     int count = 0;
     for (String id : sessionIds) {
       if (getSession(id).status() == status) {
@@ -163,7 +163,7 @@ class TokenSessionWaitingRoomIntegrationTest {
   }
 
   private void assertMaxActive(List<String> sessionIds, int max) {
-    int active = countWithStatus(sessionIds, WaitingRoomSessionStatus.ACTIVE);
+    int active = countWithStatus(sessionIds, TokenSessionStatus.ACTIVE);
     assertThat(active).isLessThanOrEqualTo(max);
   }
 

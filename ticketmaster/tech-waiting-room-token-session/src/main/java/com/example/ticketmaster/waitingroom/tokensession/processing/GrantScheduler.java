@@ -1,6 +1,6 @@
 package com.example.ticketmaster.waitingroom.tokensession.processing;
 
-import com.example.ticketmaster.waitingroom.tokensession.WaitingRoomProperties;
+import com.example.ticketmaster.waitingroom.tokensession.TokenSessionProperties;
 import com.example.ticketmaster.waitingroom.tokensession.queue.StreamCursorStore;
 import com.example.ticketmaster.waitingroom.tokensession.store.SessionStore;
 import jakarta.annotation.PreDestroy;
@@ -21,14 +21,14 @@ public class GrantScheduler {
   private static final Logger log = LoggerFactory.getLogger(GrantScheduler.class);
 
   private final StringRedisTemplate redis;
-  private final WaitingRoomProperties properties;
+  private final TokenSessionProperties properties;
   private final SessionStore store;
   private final StreamCursorStore cursorStore;
   private volatile boolean running = true;
 
   public GrantScheduler(
       StringRedisTemplate redis,
-      WaitingRoomProperties properties,
+      TokenSessionProperties properties,
       SessionStore store,
       StreamCursorStore cursorStore
   ) {
@@ -50,7 +50,7 @@ public class GrantScheduler {
       int capacity = properties.processing().capacity();
       int batchSize = properties.processing().batchSize();
 
-        String lastId = cursorStore.getLastId();
+      String lastId = cursorStore.getLastId();
       List<MapRecord<String, Object, Object>> records = redis.opsForStream().read(
           StreamReadOptions.empty().count(batchSize),
           StreamOffset.create(properties.redis().stream(), ReadOffset.from(lastId))

@@ -1,7 +1,7 @@
 package com.example.ticketmaster.waitingroom.tokensession.store;
 
-import com.example.ticketmaster.waitingroom.tokensession.model.WaitingRoomSession;
-import com.example.ticketmaster.waitingroom.tokensession.model.WaitingRoomSessionStatus;
+import com.example.ticketmaster.waitingroom.tokensession.model.TokenSession;
+import com.example.ticketmaster.waitingroom.tokensession.model.TokenSessionStatus;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -23,7 +23,7 @@ public class RedisSessionStore implements SessionStore {
     redis.opsForHash().putAll(
         sessionKey(sessionId),
         Map.of(
-            "status", WaitingRoomSessionStatus.WAITING.name(),
+            "status", TokenSessionStatus.WAITING.name(),
             "eventId", eventId,
             "userId", userId
         )
@@ -31,23 +31,23 @@ public class RedisSessionStore implements SessionStore {
   }
 
   @Override
-  public Optional<WaitingRoomSessionStatus> getStatus(String sessionId) {
+  public Optional<TokenSessionStatus> getStatus(String sessionId) {
     Object raw = redis.opsForHash().get(sessionKey(sessionId), "status");
     if (raw == null) {
       return Optional.empty();
     }
-    return Optional.of(WaitingRoomSessionStatus.valueOf(raw.toString()));
+    return Optional.of(TokenSessionStatus.valueOf(raw.toString()));
   }
 
   @Override
   public void markActive(String sessionId) {
-    redis.opsForHash().put(sessionKey(sessionId), "status", WaitingRoomSessionStatus.ACTIVE.name());
+    redis.opsForHash().put(sessionKey(sessionId), "status", TokenSessionStatus.ACTIVE.name());
     redis.opsForSet().add(ACTIVE_SET_KEY, sessionId);
   }
 
   @Override
   public void markLeft(String sessionId) {
-    redis.opsForHash().put(sessionKey(sessionId), "status", WaitingRoomSessionStatus.LEFT.name());
+    redis.opsForHash().put(sessionKey(sessionId), "status", TokenSessionStatus.LEFT.name());
     redis.opsForSet().remove(ACTIVE_SET_KEY, sessionId);
   }
 
@@ -64,7 +64,7 @@ public class RedisSessionStore implements SessionStore {
   }
 
   @Override
-  public Optional<WaitingRoomSession> get(String sessionId) {
+  public Optional<TokenSession> get(String sessionId) {
     Map<Object, Object> map = redis.opsForHash().entries(sessionKey(sessionId));
     if (map == null || map.isEmpty()) {
       return Optional.empty();
@@ -75,8 +75,8 @@ public class RedisSessionStore implements SessionStore {
       return Optional.empty();
     }
 
-    WaitingRoomSessionStatus status = WaitingRoomSessionStatus.valueOf(rawStatus.toString());
-    return Optional.of(new WaitingRoomSession(sessionId, status));
+    TokenSessionStatus status = TokenSessionStatus.valueOf(rawStatus.toString());
+    return Optional.of(new TokenSession(sessionId, status));
   }
 
   private String sessionKey(String sessionId) {

@@ -1,6 +1,6 @@
 package com.example.ticketmaster.waitingroom.tokensession.queue;
 
-import com.example.ticketmaster.waitingroom.tokensession.WaitingRoomProperties;
+import com.example.ticketmaster.waitingroom.tokensession.TokenSessionProperties;
 import java.util.Map;
 import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -9,9 +9,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class RedisStreamsJoinQueue implements JoinQueue {
   private final StringRedisTemplate redis;
-  private final WaitingRoomProperties properties;
+  private final TokenSessionProperties properties;
 
-  public RedisStreamsJoinQueue(StringRedisTemplate redis, WaitingRoomProperties properties) {
+  public RedisStreamsJoinQueue(StringRedisTemplate redis, TokenSessionProperties properties) {
     this.redis = redis;
     this.properties = properties;
   }

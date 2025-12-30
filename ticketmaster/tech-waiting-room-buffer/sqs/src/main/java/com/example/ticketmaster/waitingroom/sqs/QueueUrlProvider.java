@@ -10,10 +10,10 @@ import software.amazon.awssdk.services.sqs.model.QueueDoesNotExistException;
 @Component
 public class QueueUrlProvider {
   private final SqsClient sqs;
-  private final SqsWaitingRoomProperties properties;
+  private final SqsProperties properties;
   private final AtomicReference<String> queueUrl = new AtomicReference<>();
 
-  public QueueUrlProvider(SqsClient sqs, SqsWaitingRoomProperties properties) {
+  public QueueUrlProvider(SqsClient sqs, SqsProperties properties) {
     this.sqs = sqs;
     this.properties = properties;
   }

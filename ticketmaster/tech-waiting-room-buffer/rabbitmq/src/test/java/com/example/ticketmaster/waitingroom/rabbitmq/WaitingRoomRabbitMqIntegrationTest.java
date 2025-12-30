@@ -3,22 +3,17 @@ package com.example.ticketmaster.waitingroom.rabbitmq;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import com.example.ticketmaster.waitingroom.testsupport.WaitingRoomTestClient;
+import com.example.ticketmaster.waitingroom.testsupport.TestClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.RabbitMQContainer;
@@ -28,7 +23,7 @@ import org.testcontainers.utility.DockerImageName;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-class WaitingRoomRabbitMqIntegrationTest {
+class RabbitMqPushIntegrationTest {
 
   @Container
   static final RabbitMQContainer RABBIT = new RabbitMQContainer(DockerImageName.parse("rabbitmq:3.13-management-alpine"));
@@ -52,16 +47,16 @@ class WaitingRoomRabbitMqIntegrationTest {
 
   @Test
   void grantsUpToBatchSizePerTickUntilAllProcessed() {
-    var client = new WaitingRoomTestClient(rest, port);
+    var client = new TestClient(rest, port);
     List<String> requestIds = client.joinManyFast("E1", 100, 20);
 
     assertThat(requestIds).allSatisfy(id -> assertThat(id)
         .withFailMessage("SESSION ID NOT NUMERIC: %s", id)
         .matches("\\d+"));
-    WaitingRoomTestClient.assertNumericConsecutiveIds(requestIds);
+    TestClient.assertNumericConsecutiveIds(requestIds);
 
     var progress = client.awaitAllProcessed(requestIds, Duration.ofSeconds(60));
-    List<WaitingRoomTestClient.ProcessingBatchDto> batches = progress.batches();
+    List<TestClient.ProcessingBatchDto> batches = progress.batches();
 
   int batchSize = 10;
   int expectedMinBatches = (requestIds.size() + batchSize - 1) / batchSize;
@@ -76,7 +71,7 @@ class WaitingRoomRabbitMqIntegrationTest {
     assertThat(allGranted).containsAll(requestIds);
     assertThat(progress.processedRequestIds()).containsAll(requestIds);
 
-    WaitingRoomTestClient.assertAndLogGrouping(requestIds, batches);
+    TestClient.assertAndLogGrouping(requestIds, batches);
   }
 }
 

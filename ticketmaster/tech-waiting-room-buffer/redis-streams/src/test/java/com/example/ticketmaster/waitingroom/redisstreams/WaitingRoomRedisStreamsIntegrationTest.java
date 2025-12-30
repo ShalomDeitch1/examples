@@ -7,7 +7,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.example.ticketmaster.waitingroom.testsupport.WaitingRoomTestClient;
+import com.example.ticketmaster.waitingroom.testsupport.TestClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,7 +24,7 @@ import org.testcontainers.utility.DockerImageName;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-class WaitingRoomRedisStreamsIntegrationTest {
+class RedisStreamsPullIntegrationTest {
 
   @Container
   static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7.4.1-alpine"))
@@ -47,16 +47,16 @@ class WaitingRoomRedisStreamsIntegrationTest {
 
   @Test
   void grantsUpToBatchSizePerTickUntilAllProcessed() {
-    var client = new WaitingRoomTestClient(rest, port);
+    var client = new TestClient(rest, port);
     List<String> requestIds = client.joinManyFast("E1", 100, 20);
 
     assertThat(requestIds).allSatisfy(id -> assertThat(id)
         .withFailMessage("SESSION ID NOT NUMERIC: %s", id)
         .matches("\\d+"));
-    WaitingRoomTestClient.assertNumericConsecutiveIds(requestIds);
+    TestClient.assertNumericConsecutiveIds(requestIds);
 
     var progress = client.awaitAllProcessed(requestIds, Duration.ofSeconds(60));
-    List<WaitingRoomTestClient.ProcessingBatchDto> batches = progress.batches();
+    List<TestClient.ProcessingBatchDto> batches = progress.batches();
 
   int batchSize = 10;
   int expectedMinBatches = (requestIds.size() + batchSize - 1) / batchSize;
@@ -71,7 +71,7 @@ class WaitingRoomRedisStreamsIntegrationTest {
     assertThat(allGranted).containsAll(requestIds);
     assertThat(progress.processedRequestIds()).containsAll(requestIds);
 
-    WaitingRoomTestClient.assertAndLogGrouping(requestIds, batches);
+    TestClient.assertAndLogGrouping(requestIds, batches);
   }
 }
 

@@ -1,13 +1,13 @@
 package com.example.ticketmaster.waitingroom.tokensession.store;
 
-import com.example.ticketmaster.waitingroom.tokensession.model.WaitingRoomSession;
-import com.example.ticketmaster.waitingroom.tokensession.model.WaitingRoomSessionStatus;
+import com.example.ticketmaster.waitingroom.tokensession.model.TokenSession;
+import com.example.ticketmaster.waitingroom.tokensession.model.TokenSessionStatus;
 import java.util.Optional;
 
 public interface SessionStore {
   void createWaiting(String sessionId, String eventId, String userId);
 
-  Optional<WaitingRoomSessionStatus> getStatus(String sessionId);
+  Optional<TokenSessionStatus> getStatus(String sessionId);
 
   void markActive(String sessionId);
 
@@ -17,5 +17,5 @@ public interface SessionStore {
 
   int activeCount();
 
-  Optional<WaitingRoomSession> get(String sessionId);
+  Optional<TokenSession> get(String sessionId);
 }
