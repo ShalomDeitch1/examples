@@ -1,4 +1,3 @@
-````markdown
 # Waiting room with Kafka (pull)
 
 This module is a Kafka-backed waiting-room buffer that runs in **pull mode**.
@@ -53,4 +52,3 @@ The happy path is via tests (Testcontainers). For a manual run you need a reacha
 ```bash
 ./run.sh
 ```
-````
