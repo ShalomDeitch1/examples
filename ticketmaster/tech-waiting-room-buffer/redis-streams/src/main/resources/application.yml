@@ -1,0 +1,11 @@
+waitingroom:
+  redis:
+    stream: waiting-room-joins
+    consumer-group: granter
+    consumer-name: app
+  processing:
+    batch-size: 10
+    rate-ms: 200
+
+server:
+  port: 8080

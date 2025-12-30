@@ -19,3 +19,23 @@ Toolstack
 The general idea is to show technologies, so keep things clear and simple.
 
 If something is not clear, ask
+
+# code style
+  - use standard spring idioms
+  - use annotations where possible
+  - use JPA where relevant
+  - prefer text blocks over escaping in strings
+  - ensure that the code is easy to read and understand
+  - use imports not explicit class names, unless there is a conflict in the class names
+  - keep classes small but do not make too many tiny classes. Keep single responsibility principle in mind but also KISS.
+  - class names should not contain their contents of their package name, unless to ensure uniqueness within that project
+  - methods should be small and do one thing
+  - use constructor injection
+
+  # tools
+    - when you need a terminal use wsl
+    - when you need to delete a file use the wsl command rm
+    - if there are many files to delete make a script delete-files.sh and run it in wsl. This file should delete itself as the last step.
+    - use maven for build and dependency management
+  - use localstack for AWS emulation
+  - use Testcontainers of H2 for databases

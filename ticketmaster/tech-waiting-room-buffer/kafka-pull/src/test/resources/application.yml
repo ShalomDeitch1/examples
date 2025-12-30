@@ -1,0 +1,12 @@
+spring:
+  main:
+    banner-mode: "off"
+
+logging:
+  level:
+    org.springframework: WARN
+    org.springframework.kafka: WARN
+    org.apache.kafka: WARN
+    org.testcontainers: WARN
+    tc: WARN
+    com.github.dockerjava: WARN

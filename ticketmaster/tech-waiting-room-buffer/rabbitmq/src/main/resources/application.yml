@@ -1,0 +1,15 @@
+waitingroom:
+  rabbitmq:
+    exchange: waiting-room
+    queue: waiting-room.joins
+    routing-key: join
+  processing:
+    batch-size: 10
+    rate-ms: 200
+
+server:
+  port: 8080
+
+logging:
+  level:
+    org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer: ERROR

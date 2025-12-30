@@ -1,0 +1,17 @@
+waitingroom:
+  kafka:
+    topic: waiting-room-joins
+  processing:
+    batch-size: 10
+    rate-ms: 200
+
+spring:
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      group-id: waiting-room-granter
+      max-poll-records: ${waitingroom.processing.batch-size:10}
+
+server:
+  port: 8080

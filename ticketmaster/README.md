@@ -28,8 +28,9 @@ What we aim to support in the “real implementation” design:
 
 | Folder | What it covers | Key technologies |
 |---|---|---|
-| [tech-locking-and-transactions/](tech-locking-and-transactions/) | Prevent double-booking; demonstrates sagas and multi-DB transaction patterns | Postgres, DynamoDB, Redis locks, sagas, 2PC |
-| `tech-waiting-room/` | Waiting room + queueing trade-offs and design | SQS vs RabbitMQ vs Kafka vs Redis Streams |
+| [tech-locking-and-transactions/](tech-locking-and-transactions/README.md) | Prevent double-booking; demonstrates sagas and multi-DB transaction patterns | Postgres, DynamoDB, Redis locks, sagas, 2PC |
+| [tech-waiting-room/](./tech-waiting-room/README.md) | Waiting room + queueing trade-offs and design | SQS vs RabbitMQ vs Kafka vs Redis Streams |
+| [tech-waiting-room-token-session/](./tech-waiting-room-token-session/README.md) | Token/session bucket waiting room (stateful queue) | Redis Streams + Redis session store |
 | `tech-notifications/` | How users learn they’re out of the queue | Webhook, in-app notifications, SSE (Spring MVC) |
 | `tech-caching-hotkeys/` | Read spikes, Redis pipelining, hot-key sharding + eviction | Redis, Caffeine |
 | `simplest-implementation/` | “Works on my laptop” Ticketmaster | Spring MVC + Postgres |
