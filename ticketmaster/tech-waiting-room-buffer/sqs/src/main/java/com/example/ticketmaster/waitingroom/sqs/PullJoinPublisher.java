@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Writes join messages into SQS (the pipe) for the pull-mode example.
+ *
+ * Real system notes:
+ * - Production senders use retries/backoff, message attributes, and often idempotency keys or FIFO deduplication.
+ *
+ * How it fits this example flow:
+ * - Called by the controller to send the request ID to SQS.
+ */
 package com.example.ticketmaster.waitingroom.sqs;
 
 import org.springframework.stereotype.Component;

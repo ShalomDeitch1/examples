@@ -1,0 +1,11 @@
+waitingroom:
+  rabbitmq:
+    exchange: waiting-room
+    queue: waiting-room
+    routing-key: join
+  processing:
+    batch-size: 10
+    rate-ms: 200
+
+server:
+  port: 8080

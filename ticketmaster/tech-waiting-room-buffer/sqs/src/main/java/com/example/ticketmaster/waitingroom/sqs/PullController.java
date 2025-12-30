@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Exposes the canonical HTTP API for the SQS module.
+ *
+ * Real system notes:
+ * - Public APIs include auth/rate limiting and generally do not expose internal processing history directly.
+ *
+ * How it fits this example flow:
+ * - POST enqueues by sending to SQS; GET reads core state and processing history.
+ */
 package com.example.ticketmaster.waitingroom.sqs;
 
 import com.example.ticketmaster.waitingroom.core.Observability;

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Keep test output readable; Kafka/Testcontainers are very chatty at INFO. -->
+  <logger name="org.springframework" level="WARN" />
+  <logger name="org.springframework.kafka" level="WARN" />
+  <logger name="org.apache.kafka" level="WARN" />
+  <logger name="org.testcontainers" level="WARN" />
+  <logger name="tc" level="WARN" />
+  <logger name="com.github.dockerjava" level="WARN" />
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE" />
+  </root>
+</configuration>

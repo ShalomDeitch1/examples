@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Exposes the canonical HTTP API for the Redis Streams module.
+ *
+ * Real system notes:
+ * - Public APIs usually rely on external observability (metrics/tracing); this endpoint-based view is demo-oriented.
+ *
+ * How it fits this example flow:
+ * - POST appends to the Redis stream; GET reads core state + processing history.
+ */
 package com.example.ticketmaster.waitingroom.redisstreams;
 
 import com.example.ticketmaster.waitingroom.core.Observability;

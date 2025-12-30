@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Tick-based poller that reads from Redis Streams (pull mode) and processes items in batches.
+ *
+ * Real system notes:
+ * - Production consumers manage pending entries, scaling, and idempotency; they avoid per-item DB updates under load.
+ *
+ * How it fits this example flow:
+ * - On each tick: read up to N stream entries, mark requests processed in the core store, record processing history, ack entries.
+ */
 package com.example.ticketmaster.waitingroom.redisstreams;
 
 import com.example.ticketmaster.waitingroom.core.ProcessingHistory;

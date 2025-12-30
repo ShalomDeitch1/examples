@@ -28,6 +28,7 @@ If something is not clear, ask
   - ensure that the code is easy to read and understand
   - use imports not explicit class names, unless there is a conflict in the class names
   - keep classes small but do not make too many tiny classes. Keep single responsibility principle in mind but also KISS.
+  - class names should not contain their contents of their package name, unless to ensure uniqueness within that project
   - methods should be small and do one thing
   - use constructor injection
 

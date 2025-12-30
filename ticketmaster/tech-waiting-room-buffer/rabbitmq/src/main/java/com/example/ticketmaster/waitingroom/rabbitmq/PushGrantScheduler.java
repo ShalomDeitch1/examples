@@ -1,9 +1,19 @@
+/**
+ * Why this exists in this repo:
+ * - Tick-based batch processor for the RabbitMQ push-mode module.
+ *
+ * Real system notes:
+ * - Production processors must be horizontally scalable and rely on durable state + idempotency; per-item DB updates don’t scale.
+ *
+ * How it fits this example flow:
+ * - Drains up to N request IDs from the backlog per tick and marks them processed in the core store.
+ */
 package com.example.ticketmaster.waitingroom.rabbitmq;
 
 import com.example.ticketmaster.waitingroom.core.ProcessingHistory;
 import com.example.ticketmaster.waitingroom.core.ProcessingProperties;
 import com.example.ticketmaster.waitingroom.core.RequestStore;
-import com.example.ticketmaster.waitingroom.core.push.JoinBacklog;
+import com.example.ticketmaster.waitingroom.core.push.GroupCollector;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import org.slf4j.Logger;
@@ -14,19 +24,19 @@ import org.springframework.stereotype.Component;
 @Component
 public class PushGrantScheduler {
   private static final Logger log = LoggerFactory.getLogger(PushGrantScheduler.class);
-  private final JoinBacklog backlog;
+  private final GroupCollector groupCollector;
   private final RequestStore store;
   private final ProcessingProperties processing;
   private final ProcessingHistory processingHistory;
   private volatile boolean running = true;
 
   public PushGrantScheduler(
-      JoinBacklog backlog,
+      GroupCollector groupCollector,
       RequestStore store,
       ProcessingProperties processing,
       ProcessingHistory processingHistory
   ) {
-    this.backlog = backlog;
+    this.groupCollector = groupCollector;
     this.store = store;
     this.processing = processing;
     this.processingHistory = processingHistory;
@@ -44,7 +54,7 @@ public class PushGrantScheduler {
       int toProcess = processing.batchSize();
       var processedIds = new ArrayList<String>(toProcess);
       for (int i = 0; i < toProcess; i++) {
-        var next = backlog.poll();
+        var next = groupCollector.poll();
         if (next.isEmpty()) {
           break;
         }

@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Small HTTP client used by integration tests so each tech module’s tests stay readable and consistent.
+ *
+ * Real system notes:
+ * - Real test suites often use contract tests, test SDKs, or client libraries; this is intentionally minimal for clarity.
+ *
+ * How it fits this example flow:
+ * - Tests use it to enqueue requests and to read /observability to assert end-to-end behavior.
+ */
 package com.example.ticketmaster.waitingroom.testsupport;
 
 import java.time.Duration;

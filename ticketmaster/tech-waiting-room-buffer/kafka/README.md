@@ -6,6 +6,13 @@ Kafka supports a waiting room as a stream where consumers process requests. Kafk
 - Spring Boot 3.5.9 (Spring MVC), Java 21
 - Kafka (Testcontainers)
 
+## Also see: Kafka pull variant
+
+This module demonstrates the “push” consumer style (listener container calling your code).
+
+For an explicit “pull” consumer style (scheduled `poll()` + manual offset commits), see:
+- [../kafka-pull/](../kafka-pull/README.md)
+
 ## Core idea
 
 - Topic: `waiting-room-joins`

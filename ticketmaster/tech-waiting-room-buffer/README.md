@@ -15,8 +15,10 @@ The waiting room goal is to **meter access** to expensive/contended operations (
 
 This folder contains one subproject per option:
 - [rabbitmq/](./rabbitmq/README.md) — classic AMQP broker.
+- [rabbitmq-pull/](./rabbitmq-pull/README.md) — RabbitMQ in explicit pull mode (scheduled `basicGet`).
 - [sqs/](./sqs/README.md) — AWS SQS style queue
 - [kafka/](./kafka/README.md) — log-based broker with consumer groups.
+- [kafka-pull/](./kafka-pull/README.md) — Kafka in explicit pull mode (scheduled `poll()` + manual offset commits).
 - [redis-streams/](./redis-streams/README.md) — Redis Streams with consumer groups (chosen default for the “real implementation” in this repo).
 
 ## Trade-offs summary
@@ -70,6 +72,17 @@ flowchart TD
 Trade-offs:
 - Users poll (or you later add push notifications).
 - Fairness and ordering depend on the underlying queue technology.
+
+### Push vs pull (consumer style)
+
+This repo shows two consumer styles for the same “buffer + tick batch processor” approach:
+
+- **Push**: the library/container calls your code when messages arrive (e.g., `@KafkaListener`, `@RabbitListener`).
+- **Pull**: your code decides when to read messages (scheduled poll).
+
+Rule of thumb:
+- Prefer **push** when you want low latency and the framework is designed around listener containers.
+- Prefer **pull** when you need strict control over when/where work happens, or you want to make ack/commit behavior explicit for teaching/debugging.
 
 ## Other waiting room methods (alternatives)
 
@@ -136,6 +149,8 @@ flowchart TD
 
 - SQS implementation plan: [sqs](sqs/README.md)
 - RabbitMQ implementation plan: [rabbitmq](rabbitmq/README.md)
+- RabbitMQ (pull) implementation plan: [rabbitmq-pull](rabbitmq-pull/README.md)
 - Kafka implementation plan: [kafka](kafka/README.md)
+- Kafka (pull) implementation plan: [kafka-pull](kafka-pull/README.md)
 - Redis Streams implementation plan (default): [redis-streams](redis-streams/README.md)
 - Token/Session bucket example (Redis Streams): [tech-waiting-room-token-session](../tech-waiting-room-token-session/README.md)

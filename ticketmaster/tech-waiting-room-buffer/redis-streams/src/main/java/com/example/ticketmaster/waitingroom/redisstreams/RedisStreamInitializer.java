@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Ensures the demo stream/group exists so the example can run without external setup.
+ *
+ * Real system notes:
+ * - Initialization is usually handled by migrations/IaC; doing it at runtime can race across instances.
+ *
+ * How it fits this example flow:
+ * - Runs at startup to create/verify the Redis stream/group before publishers/pollers use it.
+ */
 package com.example.ticketmaster.waitingroom.redisstreams;
 
 import java.nio.charset.StandardCharsets;

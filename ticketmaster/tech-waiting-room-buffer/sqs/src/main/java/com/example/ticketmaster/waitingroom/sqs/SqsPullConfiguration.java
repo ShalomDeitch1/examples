@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Wires SQS client beans, queue URL lookup, and the pull-mode components.
+ *
+ * Real system notes:
+ * - Queue URLs/ARNs and credentials are environment-specific and typically injected via config/secrets managers.
+ *
+ * How it fits this example flow:
+ * - Connects the HTTP publisher and scheduled poller to the SQS queue.
+ */
 package com.example.ticketmaster.waitingroom.sqs;
 
 import java.net.URI;

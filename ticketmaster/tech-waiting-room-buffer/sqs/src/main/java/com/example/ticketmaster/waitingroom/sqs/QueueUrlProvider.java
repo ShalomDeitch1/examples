@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Small helper to resolve a queue URL from a configured name so the rest of the demo code stays clean.
+ *
+ * Real system notes:
+ * - Many systems inject the queue URL/ARN directly (from IaC outputs) and avoid resolving it at runtime.
+ *
+ * How it fits this example flow:
+ * - Used by the publisher and poller to target the correct SQS queue.
+ */
 package com.example.ticketmaster.waitingroom.sqs;
 
 import java.util.concurrent.atomic.AtomicReference;

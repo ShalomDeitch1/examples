@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - In-memory record of "what was processed on each tick" so observability and tests can see batch/tick behavior.
+ *
+ * Real system notes:
+ * - You’d publish metrics/traces (Prometheus/OpenTelemetry) or write audit events to an event stream; keeping full history in memory won’t scale.
+ *
+ * How it fits this example flow:
+ * - Schedulers/pollers call {@code record(...)} after each tick; controllers expose it via /observability.
+ */
 package com.example.ticketmaster.waitingroom.core;
 
 import java.time.Instant;

@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Tick-based poller that pulls messages from SQS (pull mode) and processes them in batches.
+ *
+ * Real system notes:
+ * - At scale you’d tune long polling, batch receive/delete, visibility timeouts, and avoid per-item DB updates.
+ *
+ * How it fits this example flow:
+ * - On each tick: receive up to N messages, mark requests processed in the core store, record processing history, delete messages.
+ */
 package com.example.ticketmaster.waitingroom.sqs;
 
 import com.example.ticketmaster.waitingroom.core.ProcessingHistory;

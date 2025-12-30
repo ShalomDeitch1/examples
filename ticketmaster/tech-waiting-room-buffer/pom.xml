@@ -14,7 +14,9 @@
     <module>waiting-room-core</module>
     <module>waiting-room-test-support</module>
     <module>kafka</module>
+    <module>kafka-pull</module>
     <module>rabbitmq</module>
+    <module>rabbitmq-pull</module>
     <module>redis-streams</module>
     <module>sqs</module>
   </modules>

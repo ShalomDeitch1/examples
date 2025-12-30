@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Exposes the canonical HTTP API for the Kafka module: enqueue requests + read observability.
+ *
+ * Real system notes:
+ * - Public APIs usually sit behind auth/rate limiting and return stable IDs; observability is usually metrics/tracing rather than an endpoint.
+ *
+ * How it fits this example flow:
+ * - POST enqueues (publisher → Kafka); GET reads from core state (RequestStore + ProcessingHistory).
+ */
 package com.example.ticketmaster.waitingroom.kafka;
 
 import com.example.ticketmaster.waitingroom.core.Observability;

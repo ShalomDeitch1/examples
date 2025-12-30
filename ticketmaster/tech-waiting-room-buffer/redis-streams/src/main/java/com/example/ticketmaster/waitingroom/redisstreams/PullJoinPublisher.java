@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Appends join messages to Redis Streams (the pipe) for the pull-mode example.
+ *
+ * Real system notes:
+ * - Production publishing includes schema/versioning, retention management, and back-pressure handling.
+ *
+ * How it fits this example flow:
+ * - Called by the controller to write the request ID into the stream.
+ */
 package com.example.ticketmaster.waitingroom.redisstreams;
 
 import java.util.Map;

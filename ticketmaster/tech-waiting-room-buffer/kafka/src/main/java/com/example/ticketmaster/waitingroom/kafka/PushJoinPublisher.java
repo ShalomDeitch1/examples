@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Writes join messages into Kafka (the pipe) for the push-mode example.
+ *
+ * Real system notes:
+ * - You’d use strong schemas (Avro/Protobuf), keys for partitioning, retries, and idempotent producers where relevant.
+ *
+ * How it fits this example flow:
+ * - Called by the controller when a request is created; publishes the request ID to the Kafka topic.
+ */
 package com.example.ticketmaster.waitingroom.kafka;
 
 import org.springframework.kafka.core.KafkaTemplate;

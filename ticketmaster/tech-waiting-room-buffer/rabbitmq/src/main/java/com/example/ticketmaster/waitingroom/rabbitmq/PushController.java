@@ -1,3 +1,13 @@
+/**
+ * Why this exists in this repo:
+ * - Exposes the canonical HTTP API for the RabbitMQ module.
+ *
+ * Real system notes:
+ * - APIs usually include auth, idempotency keys, and back-pressure controls; observability is typically externalized.
+ *
+ * How it fits this example flow:
+ * - POST publishes to RabbitMQ; GET reads from core state and processing history.
+ */
 package com.example.ticketmaster.waitingroom.rabbitmq;
 
 import com.example.ticketmaster.waitingroom.core.Observability;

@@ -1,9 +1,19 @@
+/**
+ * Why this exists in this repo:
+ * - Tick-based batch processor for the Kafka push-mode module.
+ *
+ * Real system notes:
+ * - At scale you’d make this horizontally scalable and durable: poll lag/offsets, use idempotency, and avoid per-item DB writes.
+ *
+ * How it fits this example flow:
+ * - On each tick, drains up to {@code waitingroom.processing.batch-size} IDs from the backlog and marks them processed in the core store.
+ */
 package com.example.ticketmaster.waitingroom.kafka;
 
 import com.example.ticketmaster.waitingroom.core.ProcessingHistory;
 import com.example.ticketmaster.waitingroom.core.ProcessingProperties;
 import com.example.ticketmaster.waitingroom.core.RequestStore;
-import com.example.ticketmaster.waitingroom.core.push.JoinBacklog;
+import com.example.ticketmaster.waitingroom.core.push.GroupCollector;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import org.slf4j.Logger;
@@ -14,14 +24,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class PushGrantScheduler {
   private static final Logger log = LoggerFactory.getLogger(PushGrantScheduler.class);
-  private final JoinBacklog backlog;
+  private final GroupCollector backlog;
   private final RequestStore store;
   private final ProcessingProperties processing;
   private final ProcessingHistory processingHistory;
   private volatile boolean running = true;
 
   public PushGrantScheduler(
-      JoinBacklog backlog,
+      GroupCollector backlog,
       RequestStore store,
       ProcessingProperties processing,
       ProcessingHistory processingHistory

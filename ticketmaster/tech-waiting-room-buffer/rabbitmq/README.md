@@ -6,6 +6,13 @@ RabbitMQ implements a waiting room as a classic work-queue: join requests are me
 - Spring Boot 3.5.9 (Spring MVC), Java 21
 - RabbitMQ (Testcontainers for local testing)
 
+## Also see: RabbitMQ pull variant
+
+This module demonstrates the “push” consumer style (listener container calling your code).
+
+For an explicit “pull” consumer style (scheduled `basicGet` + manual ack), see:
+- [../rabbitmq-pull/](../rabbitmq-pull/README.md)
+
 ## API (shared)
 
 This module uses the shared 2-endpoint API:

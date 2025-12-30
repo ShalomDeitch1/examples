@@ -1,3 +1,14 @@
+/**
+ * Why this exists in this repo:
+ * - Minimal in-memory "state store" for waiting-room requests (WAITING/PROCESSED) so the examples can focus on the pipe tech.
+ *
+ * Real system notes:
+ * - This would be a durable store (DB/Redis) with idempotency keys and set-based/batched updates; per-item DB roundtrips won’t scale.
+ * - You’d typically record processing outcomes in bulk and rely on constraints (unique keys) to tolerate duplicates.
+ *
+ * How it fits this example flow:
+ * - HTTP creates requests here, schedulers/pollers mark them processed, and observability endpoints read counts/snapshots.
+ */
 package com.example.ticketmaster.waitingroom.core;
 
 import java.time.Clock;

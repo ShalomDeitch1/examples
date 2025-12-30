@@ -1,6 +1,16 @@
+/**
+ * Why this exists in this repo:
+ * - Wires RabbitMQ-specific beans (publisher, listener, backlog buffer) for the push-mode demo.
+ *
+ * Real system notes:
+ * - Real apps tune ack/retry/DLQ behavior and monitor consumer lag/backlog growth.
+ *
+ * How it fits this example flow:
+ * - Connects Rabbit delivery callbacks to the scheduled processor via the shared backlog buffer.
+ */
 package com.example.ticketmaster.waitingroom.rabbitmq;
 
-import com.example.ticketmaster.waitingroom.core.push.JoinBacklog;
+import com.example.ticketmaster.waitingroom.core.push.GroupCollector;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Declarables;
@@ -15,8 +25,8 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMqPushConfiguration {
 
   @Bean
-  public JoinBacklog joinBacklog() {
-    return new JoinBacklog();
+  public GroupCollector joinBacklog() {
+    return new GroupCollector();
   }
 
   @Bean
