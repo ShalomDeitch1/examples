@@ -9,7 +9,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -17,7 +20,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.RedisContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -49,11 +51,8 @@ class TokenSessionWaitingRoomIntegrationTest {
   @LocalServerPort
   int port;
 
-  private final TestRestTemplate rest;
-
-  TokenSessionWaitingRoomIntegrationTest(TestRestTemplate rest) {
-    this.rest = rest;
-  }
+  @Autowired
+  private TestRestTemplate rest;
 
   @Test
   void grantsSessionsUpToCapacityAndThenContinuesAfterLeave() {

@@ -43,6 +43,10 @@ public class GrantScheduler {
       initialDelayString = "${waitingroom.processing.initial-delay-ms:0}"
   )
   public void grantAvailable() {
+    // This is the core of the token/session waiting room:
+    // - Read join events from the Redis Stream.
+    // - While below capacity, mark sessions ACTIVE.
+    // - Persist a cursor so subsequent ticks continue from the last processed entry.
     if (!running) {
       return;
     }
@@ -62,6 +66,7 @@ public class GrantScheduler {
 
       String lastProcessedId = null;
       for (MapRecord<String, Object, Object> record : records) {
+        // Enforce the rule: never exceed configured ACTIVE capacity.
         if (store.activeCount() >= capacity) {
           break;
         }
@@ -70,11 +75,13 @@ public class GrantScheduler {
         Object rawSessionId = value.get("sessionId");
         String sessionId = rawSessionId == null ? null : rawSessionId.toString();
         if (sessionId == null || sessionId.isBlank()) {
+          // Malformed record: skip it but still advance the cursor so we don't get stuck.
           lastProcessedId = record.getId().getValue();
           continue;
         }
 
         if (!store.isActive(sessionId)) {
+          // Idempotent activation (safe if the same session is processed again).
           store.markActive(sessionId);
         }
         lastProcessedId = record.getId().getValue();
@@ -87,6 +94,7 @@ public class GrantScheduler {
       if (!running) {
         return;
       }
+      // Keep the teaching example resilient: one bad tick shouldn't kill the app.
       log.debug("Grant scheduler tick failed: {}", e.toString());
     }
   }
