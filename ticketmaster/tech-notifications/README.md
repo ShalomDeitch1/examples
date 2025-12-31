@@ -15,7 +15,7 @@ All examples use Spring MVC (Java 21, Spring Boot 3.5.9).
 
 ## Subprojects
 
-- [`app-notification/`](app-notification/README.md) — User-app polls Ticketmaster for notifications (regular polling).
+- [`polling/`](polling/README.md) — User-app polls Ticketmaster for notifications (regular polling).
 - [`long-polling/`](long-polling/README.md) — User-app polls, but server holds connection until status changes.
 - [`sse/`](sse/README.md) — User subscribes to SSE stream from Ticketmaster.
 - [`webhook/`](webhook/README.md) — Ticketmaster calls user-app endpoint when ACTIVE.
